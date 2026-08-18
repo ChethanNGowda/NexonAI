@@ -1,0 +1,70 @@
+# Python environments and caches
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node/Electron dependencies and build output
+node_modules/
+frontend/node_modules/
+dist/
+build/
+out/
+release/
+*.asar
+
+# Environment files and secrets
+.env
+*.env
+!.env.example
+!*.env.example
+frontend/.env
+
+# Logs and runtime output
+logs/
+*.log
+*.tmp
+tmp/
+temp/
+
+# Runtime-generated audio
+audio/
+frontend/audio/
+backend/voice/audio/
+*.wav
+*.mp3
+phoebe_preview_*.mp3
+
+# Downloaded AI models and caches
+models/
+frontend/whisper-model/
+whisper-model/
+.cache/
+cache/
+*.bin
+*.onnx
+*.pt
+*.pth
+*.safetensors
+*.gguf
+*.ggml
+
+# Generated/sensitive local inventories
+microsoft_voices.txt
+
+# IDE/editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini

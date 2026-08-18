@@ -1,0 +1,10 @@
+edge-tts==7.2.8
+elevenlabs==2.64.0
+faster-whisper==1.2.1
+numpy==2.5.2
+ollama==0.6.2
+python-dotenv==1.2.2
+pyttsx3==2.99
+pywin32==312
+sounddevice==0.5.5
+soundfile==0.14.0
