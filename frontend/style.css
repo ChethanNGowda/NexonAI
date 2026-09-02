@@ -1,3 +1,4 @@
+```css
 #phoebe {
     position: absolute;
     left: 0;
@@ -5,63 +6,102 @@
     will-change: transform;
     user-select: none;
     -webkit-user-drag: none;
+
+    /* Smoother animation rendering */
+    transform-origin: center bottom;
 }
+
+/* =========================
+   WALKING
+   ========================= */
 
 .walking {
-    animation: phoebeWalk 0.6s ease-in-out infinite;
-}
-
-.sitting {
-    animation: phoebeSit 1.8s ease-in-out infinite;
-}
-
-.jumping {
-    animation: phoebeJump 0.9s ease-in-out;
+    animation: phoebeWalk 0.55s ease-in-out infinite;
 }
 
 @keyframes phoebeWalk {
     0%, 100% {
-        transform: translateY(0);
+        transform: translateY(0) rotate(0deg);
+    }
+
+    25% {
+        transform: translateY(-2px) rotate(-1deg);
     }
 
     50% {
-        transform: translateY(-3px);
+        transform: translateY(-5px) rotate(0deg);
     }
+
+    75% {
+        transform: translateY(-2px) rotate(1deg);
+    }
+}
+
+
+/* =========================
+   SITTING
+   ========================= */
+
+.sitting {
+    animation: phoebeSit 2.2s ease-in-out infinite;
 }
 
 @keyframes phoebeSit {
     0%, 100% {
-        transform: translateY(0);
+        transform: translateY(0) scaleY(1);
     }
 
     50% {
-        transform: translateY(2px);
+        transform: translateY(2px) scaleY(0.99);
     }
+}
+
+
+/* =========================
+   JUMPING
+   ========================= */
+
+.jumping {
+    animation: phoebeJump 0.9s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
 @keyframes phoebeJump {
     0% {
-        transform: translateY(0);
+        transform: translateY(0) scale(1);
     }
 
-    35% {
-        transform: translateY(-25px);
+    20% {
+        transform: translateY(0) scale(0.96, 1.04);
     }
 
-    70% {
-        transform: translateY(0);
+    40% {
+        transform: translateY(-30px) scale(1.02);
     }
 
-    85% {
-        transform: translateY(-5px);
+    60% {
+        transform: translateY(-18px) scale(1);
+    }
+
+    78% {
+        transform: translateY(0) scale(1.03, 0.97);
+    }
+
+    88% {
+        transform: translateY(-5px) scale(1);
     }
 
     100% {
-        transform: translateY(0);
+        transform: translateY(0) scale(1);
     }
 }
+
+
+/* =========================
+   TALKING
+   ========================= */
+
 .talking {
-    animation: phoebeTalking 0.35s ease-in-out infinite;
+    animation: phoebeTalking 0.32s ease-in-out infinite;
 }
 
 @keyframes phoebeTalking {
@@ -69,7 +109,140 @@
         transform: translateY(0) scale(1);
     }
 
+    25% {
+        transform: translateY(-1px) scale(1.01);
+    }
+
     50% {
-        transform: translateY(-2px) scale(1.02);
+        transform: translateY(-3px) scale(1.025);
+    }
+
+    75% {
+        transform: translateY(-1px) scale(1.01);
     }
 }
+
+
+/* =========================
+   IDLE / BREATHING
+   ========================= */
+
+.idle {
+    animation: phoebeIdle 3s ease-in-out infinite;
+}
+
+@keyframes phoebeIdle {
+    0%, 100% {
+        transform: translateY(0) scale(1);
+    }
+
+    50% {
+        transform: translateY(-2px) scale(1.01);
+    }
+}
+
+
+/* =========================
+   HAPPY
+   ========================= */
+
+.happy {
+    animation: phoebeHappy 0.7s ease-in-out infinite;
+}
+
+@keyframes phoebeHappy {
+    0%, 100% {
+        transform: translateY(0) rotate(0deg);
+    }
+
+    25% {
+        transform: translateY(-4px) rotate(-2deg);
+    }
+
+    50% {
+        transform: translateY(-7px) rotate(0deg);
+    }
+
+    75% {
+        transform: translateY(-4px) rotate(2deg);
+    }
+}
+
+
+/* =========================
+   SURPRISED
+   ========================= */
+
+.surprised {
+    animation: phoebeSurprised 0.5s ease-out;
+}
+
+@keyframes phoebeSurprised {
+    0% {
+        transform: scale(1);
+    }
+
+    35% {
+        transform: scale(1.08);
+    }
+
+    65% {
+        transform: scale(0.98);
+    }
+
+    100% {
+        transform: scale(1);
+    }
+}
+
+
+/* =========================
+   SLEEPING
+   ========================= */
+
+.sleeping {
+    animation: phoebeSleep 3s ease-in-out infinite;
+}
+
+@keyframes phoebeSleep {
+    0%, 100% {
+        transform: translateY(0) scaleY(1);
+    }
+
+    50% {
+        transform: translateY(2px) scaleY(0.98);
+    }
+}
+
+
+/* =========================
+   SMOOTH STATE CHANGES
+   ========================= */
+
+#phoebe {
+    transition:
+        left 0.25s ease,
+        top 0.25s ease,
+        opacity 0.2s ease;
+}
+
+
+/* =========================
+   REDUCE MOTION
+   ========================= */
+
+@media (prefers-reduced-motion: reduce) {
+    #phoebe,
+    .walking,
+    .sitting,
+    .jumping,
+    .talking,
+    .idle,
+    .happy,
+    .surprised,
+    .sleeping {
+        animation: none !important;
+        transition: none !important;
+    }
+}
+```
