@@ -1,39 +1,51 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Nexon</title>
-
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexon AI</title>
     <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
+    <div id="windowControls" class="window-controls">
+        <button id="minimizeBtn" class="window-button" type="button" title="Minimize" aria-label="Minimize">-</button>
+        <button id="closeBtn" class="window-button" type="button" title="Close" aria-label="Close">x</button>
+    </div>
 
-    <div id="speech"></div>
+    <div id="speech" class="speech-bubble" aria-live="polite">Hi, I'm Bob.</div>
 
-    <div id="phoebe">
+    <form id="askForm" class="ask-form">
+        <input id="askInput" class="ask-input" type="text" autocomplete="off" placeholder="Ask Bob">
+        <button class="ask-button" type="submit" title="Send" aria-label="Send">></button>
+    </form>
+
+    <button id="bob" class="bob sitting" type="button" aria-label="Talk to Bob">
         <div class="character">
             <div class="head">
                 <div class="hair"></div>
-
                 <div class="eyes">
-                    <span>✦</span>
-                    <span>✦</span>
+                    <span>*</span>
+                    <span>*</span>
                 </div>
-
-                <div class="mouth">ω</div>
+                <div class="mouth">w</div>
             </div>
 
-            <div class="body"></div>
+            <div class="body">
+                <div class="scarf"></div>
+                <div class="arm left"></div>
+                <div class="arm right"></div>
+            </div>
 
             <div class="feet">
                 <span></span>
                 <span></span>
             </div>
         </div>
-    </div>
+    </button>
+
+    <div id="status" class="status">Starting</div>
 
     <script src="renderer.js"></script>
-
 </body>
 </html>

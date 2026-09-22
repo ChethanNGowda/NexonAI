@@ -1,11 +1,12 @@
 {
-  "name": "frontend",
+  "name": "nexon-ai-frontend",
   "version": "1.0.0",
-  "description": "",
+  "description": "Electron desktop companion UI for Nexon AI Bob.",
   "main": "main.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "electron ."
+    "start": "electron .",
+    "check": "node --check main.js && node --check renderer.js",
+    "test": "npm run check"
   },
   "keywords": [],
   "author": "",
@@ -13,8 +14,5 @@
   "type": "commonjs",
   "devDependencies": {
     "electron": "^43.4.0"
-  },
-  "dependencies": {
-    "@nut-tree-fork/nut-js": "^4.2.6"
   }
 }

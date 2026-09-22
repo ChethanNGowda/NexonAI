@@ -1,89 +1,140 @@
-// ===============================
-// PHOEBE VOICE ASSISTANT
-// ===============================
+const bob = document.getElementById("bob");
+const speech = document.getElementById("speech");
+const statusLabel = document.getElementById("status");
+const minimizeBtn = document.getElementById("minimizeBtn");
+const closeBtn = document.getElementById("closeBtn");
+const askForm = document.getElementById("askForm");
+const askInput = document.getElementById("askInput");
 
-const SpeechRecognition =
-    window.SpeechRecognition ||
-    window.webkitSpeechRecognition;
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
 let recognition = null;
 let listening = false;
+let shouldListen = true;
+let actionTimer = null;
 
-if (SpeechRecognition) {
+const idleReplies = [
+    "I'm here.",
+    "Ready when you are.",
+    "Say Bob if you need me.",
+    "I'm keeping an eye on things."
+];
+
+function setStatus(text) {
+    statusLabel.textContent = text;
+}
+
+function setBubble(text) {
+    speech.textContent = text;
+}
+
+function setMood(mood) {
+    bob.classList.remove("walking", "sitting", "jumping", "talking");
+    bob.classList.add(mood);
+}
+
+function scheduleNextAction() {
+    clearTimeout(actionTimer);
+
+    actionTimer = setTimeout(() => {
+        const actions = ["sitting", "walking", "jumping"];
+        const mood = actions[Math.floor(Math.random() * actions.length)];
+
+        setMood(mood);
+
+        if (mood === "jumping") {
+            setTimeout(() => setMood("sitting"), 950);
+        }
+
+        scheduleNextAction();
+    }, 3000 + Math.random() * 4000);
+}
+
+function startRecognition() {
+    if (!recognition || listening || !shouldListen) {
+        return;
+    }
+
+    try {
+        recognition.start();
+    } catch (error) {
+        console.log("Could not start speech recognition:", error.message);
+    }
+}
+
+function stopRecognition() {
+    shouldListen = false;
+
+    if (recognition && listening) {
+        recognition.stop();
+    }
+
+    listening = false;
+    setStatus("Paused");
+}
+
+function setupRecognition() {
+    if (!SpeechRecognition) {
+        setStatus("Click Bob to talk");
+        return;
+    }
+
     recognition = new SpeechRecognition();
-
     recognition.continuous = true;
     recognition.interimResults = false;
     recognition.lang = "en-US";
 
     recognition.onstart = () => {
         listening = true;
-        console.log("Phoebe is listening...");
+        setStatus("Listening");
     };
 
     recognition.onend = () => {
         listening = false;
 
-        // Keep listening automatically
-        setTimeout(() => {
-            if (recognition && !listening) {
-                try {
-                    recognition.start();
-                } catch (e) {}
-            }
-        }, 500);
+        if (shouldListen) {
+            setStatus("Restarting");
+            setTimeout(startRecognition, 700);
+        }
     };
 
     recognition.onerror = (event) => {
         console.log("Voice error:", event.error);
+        setStatus(event.error === "not-allowed" ? "Mic blocked" : "Voice retrying");
     };
 
     recognition.onresult = (event) => {
-        const result =
-            event.results[event.results.length - 1][0].transcript
-                .trim()
-                .toLowerCase();
+        const result = event.results[event.results.length - 1][0].transcript
+            .trim()
+            .toLowerCase();
 
         console.log("You said:", result);
-
-        handlePhoebeCommand(result);
+        handleBobCommand(result);
     };
 
-    try {
-        recognition.start();
-    } catch (e) {
-        console.log("Could not start speech recognition.");
-    }
-} else {
-    console.log("Speech recognition is not supported.");
+    startRecognition();
 }
 
+function handleBobCommand(command) {
+    if (!command) {
+        return;
+    }
 
-// ===============================
-// COMMAND HANDLER
-// ===============================
+    if (command.includes("stop listening")) {
+        speakBob("Okay, I'll stay quiet for now.");
+        stopRecognition();
+        return;
+    }
 
-function handlePhoebeCommand(command) {
-
-    // Wake word
-    if (
-        command.includes("phoebe") ||
-        command.includes("phoebe")
-    ) {
-        console.log("Phoebe activated!");
-
-        speakPhoebe(
-            "Hehe~ I'm here! What can I do for you?"
-        );
-
+    if (command.includes("start listening") || command.includes("wake up")) {
+        shouldListen = true;
+        startRecognition();
+        speakBob("I'm listening again.");
         return;
     }
 
     if (command.includes("hello") || command.includes("hi")) {
-        speakPhoebe(
-            "Hello! I'm Phoebe~ 💙"
-        );
-
+        speakBob("Hello! I'm Bob.");
         return;
     }
 
@@ -92,65 +143,107 @@ function handlePhoebeCommand(command) {
         command.includes("what can you") ||
         command.includes("help me")
     ) {
-        speakPhoebe(
-            "I can talk with you, control your computer, help with files, coding, and much more!"
-        );
-
+        speakBob("I can listen, answer simple commands, and sit on your desktop while the Python assistant handles deeper voice tasks.");
         return;
     }
 
-    if (
-        command.includes("who are you") ||
-        command.includes("your name")
-    ) {
-        speakPhoebe(
-            "I'm Phoebe, your Nexon AI assistant!"
-        );
-
+    if (command.includes("who are you") || command.includes("your name")) {
+        speakBob("I'm Bob, your Nexon AI desktop companion.");
         return;
     }
 
-    if (command.includes("stop listening")) {
-        speakPhoebe(
-            "Okay~ I'll be quiet for now."
-        );
+    if (command.includes("bob")) {
+        const prompt = command.replace(/\bbob\b/g, "").trim();
 
-        if (recognition) {
-            recognition.stop();
+        if (!prompt) {
+            speakBob("I'm here. What are we doing?");
+            return;
         }
 
-        return;
+        askBackend(prompt);
     }
 }
 
+async function askBackend(message) {
+    const text = message.trim();
 
-// ===============================
-// PHOEBE SPEECH
-// ===============================
+    if (!text) {
+        return;
+    }
 
-function speakPhoebe(text) {
+    setBubble("Thinking...");
+    setStatus("Thinking");
+    setMood("sitting");
+    askInput.disabled = true;
 
-    console.log("Phoebe:", text);
+    try {
+        const result = await window.bob?.ask(text);
 
-    // Stop previous speech
+        if (!result?.ok) {
+            speakBob(result?.error || "I could not answer that yet.");
+            return;
+        }
+
+        speakBob(result.answer);
+    } catch (error) {
+        speakBob(`I hit a bridge error: ${error.message}`);
+    } finally {
+        askInput.disabled = false;
+        askInput.focus();
+    }
+}
+
+function speakBob(text) {
+    console.log("Bob:", text);
+    setBubble(text);
+
+    if (!("speechSynthesis" in window)) {
+        setMood("sitting");
+        return;
+    }
+
     window.speechSynthesis.cancel();
 
-    const speech = new SpeechSynthesisUtterance(text);
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.2;
+    utterance.volume = 1.0;
 
-    speech.rate = 1.0;
-    speech.pitch = 1.25;
-    speech.volume = 1.0;
-
-    speech.onstart = () => {
-        phoebe.classList.remove("walking");
-        phoebe.classList.add("talking");
+    utterance.onstart = () => {
+        setMood("talking");
+        setStatus("Speaking");
     };
 
-    speech.onend = () => {
-        phoebe.classList.remove("talking");
-
+    utterance.onend = () => {
+        setMood("sitting");
+        setStatus(shouldListen ? "Listening" : "Paused");
         scheduleNextAction();
     };
 
-    window.speechSynthesis.speak(speech);
+    window.speechSynthesis.speak(utterance);
 }
+
+bob.addEventListener("click", () => {
+    const reply = idleReplies[Math.floor(Math.random() * idleReplies.length)];
+    speakBob(reply);
+});
+
+minimizeBtn.addEventListener("click", () => {
+    window.bob?.minimize();
+});
+
+closeBtn.addEventListener("click", () => {
+    window.bob?.close();
+});
+
+askForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+
+    const message = askInput.value.trim();
+    askInput.value = "";
+    askBackend(message);
+});
+
+setMood("sitting");
+setupRecognition();
+scheduleNextAction();

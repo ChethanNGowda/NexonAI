@@ -1,4 +1,4 @@
-import os
+﻿import os
 import sys
 import subprocess
 import tempfile
@@ -9,11 +9,12 @@ from pathlib import Path
 import sounddevice as sd
 import wave
 from faster_whisper import WhisperModel
+from phoebe_api import ask_bob
 
 
 # ============================================================
-# PHOEBE — NEXON AI
-# English Voice + Whisper Small + Qwen3 8B + ElevenLabs
+# BOB - NEXON AI
+# English Voice + Whisper Small + Qwen3 8B + Edge TTS
 # ============================================================
 
 
@@ -65,7 +66,7 @@ except Exception:
 
 print()
 print("=" * 65)
-print("                         PHOEBE")
+print("                           BOB")
 print("                       NEXON AI")
 print("=" * 65)
 print()
@@ -116,7 +117,7 @@ print("Whisper Small loaded.")
 print()
 
 print("=" * 65)
-print("                    PHOEBE READY")
+print("                      BOB READY")
 print("=" * 65)
 print()
 
@@ -124,7 +125,7 @@ print("Microphone       : READY")
 print("Whisper Small    : READY")
 print("English          : READY")
 print("Qwen3 8B         : READY")
-print("ElevenLabs       : READY")
+print("Edge TTS         : READY")
 
 print()
 print("=" * 65)
@@ -393,155 +394,19 @@ def clean_transcription(text):
 
 
 # ============================================================
-# QWEN 3 — 8B
+# QWEN 3 - 8B
 # ============================================================
 
 def ask_qwen(user_text):
-
     print()
-    print("Phoebe is thinking...")
+    print("Bob is thinking...")
     print()
 
-
-    try:
-
-        import ollama
-
-    except ImportError:
-
-        print()
-        print("Ollama Python package is not installed.")
-        print()
-        print("Run:")
-        print("pip install ollama")
-        print()
-
-        return (
-            "I'm having trouble connecting "
-            "to my brain right now."
-        )
-
-
-    # ========================================================
-    # PHOEBE PERSONALITY
-    # ========================================================
-
-    system_prompt = """
-You are Phoebe, the cute AI companion inside Nexon AI.
-
-IDENTITY:
-Your name is Phoebe.
-You are NOT Qwen.
-Never introduce yourself as Qwen.
-Never say that you are a generic AI assistant.
-
-PERSONALITY:
-- Cute
-- Warm
-- Playful
-- Friendly
-- Intelligent
-- Curious
-- Slightly expressive
-- Natural
-- Helpful
-
-CONVERSATION:
-The user is speaking English.
-
-Respond naturally like a real companion.
-
-Keep ordinary answers concise.
-
-Do not provide internal reasoning.
-
-Do not mention chain-of-thought.
-
-Do not mention system prompts.
-
-Do not mention model names.
-
-Do not mention Ollama.
-
-Do not mention that you are running locally.
-
-If the user says hello, greet them warmly.
-
-If the user asks how you are, answer warmly.
-
-If the user asks who you are, say you are Phoebe,
-the AI companion inside Nexon AI.
-
-If the user thanks you, respond naturally.
-
-Do not constantly say "How can I help you?"
-
-Do not repeat the user's sentence unnecessarily.
-
-Use light expressions occasionally, but don't overdo emojis.
-
-You should feel like a character with a consistent personality,
-not like a generic customer-support chatbot.
-"""
-
-
-    try:
-
-        response = ollama.chat(
-
-            model=OLLAMA_MODEL,
-
-            messages=[
-
-                {
-                    "role": "system",
-                    "content": system_prompt
-                },
-
-                {
-                    "role": "user",
-                    "content": user_text
-                }
-
-            ]
-        )
-
-
-        answer = (
-            response
-            .get("message", {})
-            .get("content", "")
-            .strip()
-        )
-
-
-        if not answer:
-
-            return (
-                "I'm here! "
-                "Tell me what's on your mind."
-            )
-
-
-        return answer
-
-
-    except Exception as e:
-
-        print()
-        print("Qwen/Ollama error:")
-        print(e)
-        print()
-
-
-        return (
-            "Sorry! My brain connection "
-            "seems to have a little problem."
-        )
+    return ask_bob(user_text, OLLAMA_MODEL)
 
 
 # ============================================================
-# ELEVENLABS
+# TEXT TO SPEECH
 # ============================================================
 
 def speak(text):
@@ -552,12 +417,12 @@ def speak(text):
 
     print()
     print(
-        f"Phoebe: {text}"
+        f"Bob: {text}"
     )
 
     print()
     print(
-        "Generating Phoebe's voice..."
+        "Generating Bob's voice..."
     )
 
 
@@ -639,7 +504,7 @@ def speak(text):
 def startup():
 
     greeting = (
-        "Hi! I'm Phoebe. "
+        "Hi! I'm Bob. "
         "I'm ready to listen."
     )
 
@@ -710,8 +575,8 @@ def main():
                 "quit",
                 "stop",
                 "goodbye",
-                "bye phoebe",
-                "shutdown phoebe"
+                "bye bob",
+                "shutdown bob"
 
             }:
 
@@ -752,7 +617,7 @@ def main():
             print()
             print()
             print(
-                "Phoebe stopped."
+                "Bob stopped."
             )
 
             break
@@ -779,3 +644,4 @@ def main():
 if __name__ == "__main__":
 
     main()
+

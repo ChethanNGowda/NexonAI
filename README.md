@@ -1,13 +1,14 @@
-# Nexon AI
+﻿# Nexon AI
 
-Nexon AI is a local Windows desktop AI companion named Phoebe. It combines an Electron desktop avatar with Python voice, speech-to-text, local LLM, and text-to-speech components so Phoebe can listen, respond, and act like a lightweight desktop assistant.
+Nexon AI is a local Windows desktop AI companion named Bob. It combines an Electron desktop avatar with Python voice, speech-to-text, local LLM, and text-to-speech components so Bob can listen, respond, and act like a lightweight desktop assistant.
 
 Nexon AI is not related to the Nexon gaming company.
 
 ## Main Features
 
 - Frameless always-on-top Electron companion window
-- Phoebe avatar UI with browser speech recognition support
+- Bob avatar UI with typed chat and browser speech recognition support
+- Electron-to-Python bridge for asking the local Ollama model from the desktop UI
 - Python voice loop for microphone recording and transcription
 - faster-whisper speech-to-text support
 - Ollama-powered local chat using `qwen3:8b`
@@ -17,10 +18,11 @@ Nexon AI is not related to the Nexon gaming company.
 
 ## Architecture
 
-- `frontend/` contains the Electron app, renderer UI, Phoebe avatar assets, and Python voice assistant scripts.
-- `frontend/phoebe_brain.py` records microphone input, transcribes with faster-whisper, sends prompts to Ollama, and invokes Phoebe TTS.
-- `frontend/phoebe_tts.py` generates runtime voice audio with Microsoft Edge TTS.
-- `frontend/phoebe_voice.py` is an ElevenLabs voice-preview/design utility that reads credentials from `.env`.
+- `frontend/` contains the Electron app, renderer UI, Bob avatar assets, and Python voice assistant scripts.
+- `frontend/Bob_api.py` is the JSON bridge used by Electron to ask the local model.
+- `frontend/Bob_brain.py` records microphone input, transcribes with faster-whisper, sends prompts to Ollama, and invokes Bob TTS.
+- `frontend/Bob_tts.py` generates runtime voice audio with Microsoft Edge TTS.
+- `frontend/Bob_voice.py` is an ElevenLabs voice-preview/design utility that reads credentials from `.env`.
 - `backend/` contains early backend module areas for voice, automation, AI, files, vision, core logic, and code-agent features.
 - `config/system_prompt.txt` stores Nexon AI's local assistant behavior prompt.
 
@@ -45,7 +47,7 @@ NexonAI/
   config/                  Assistant prompt/config files
   data/                    Local app data
   docs/                    Project documentation
-  frontend/                Electron UI and Phoebe runtime scripts
+  frontend/                Electron UI and Bob runtime scripts
     assets/phoebe/         Avatar assets
     audio/                 Runtime-generated audio, ignored by Git
     whisper-model/         Downloaded faster-whisper model, ignored by Git
@@ -79,7 +81,7 @@ cd frontend
 npm install
 ```
 
-The root `package.json` currently only contains the `howler` dependency. The Electron app runs from `frontend/package.json`.
+The root `package.json` delegates common commands to `frontend/package.json`.
 
 ## Ollama Setup
 
@@ -89,11 +91,11 @@ Install Ollama for Windows, start Ollama, and download the local chat model:
 ollama pull qwen3:8b
 ```
 
-`frontend/phoebe_brain.py` expects `qwen3:8b` by default.
+`frontend/Bob_brain.py` expects `qwen3:8b` by default.
 
 ## Whisper/faster-whisper Setup
 
-Phoebe uses faster-whisper for local speech-to-text. If `frontend/whisper-model/` exists, the app uses that local model folder. If it does not exist, faster-whisper can download the configured `small` model on first use.
+Bob uses faster-whisper for local speech-to-text. If `frontend/whisper-model/` exists, the app uses that local model folder. If it does not exist, faster-whisper can download the configured `small` model on first use.
 
 Downloaded Whisper and Hugging Face cache files are intentionally ignored by Git. Do not commit `frontend/whisper-model/`, model binaries, or cache folders.
 
@@ -111,38 +113,57 @@ Then fill in:
 
 ```text
 ELEVENLABS_API_KEY=your-real-key
-PHOEBE_VOICE_ID=your-voice-id
+Bob_VOICE_ID=your-voice-id
 ```
 
-`frontend/phoebe_voice.py` reads these values with `python-dotenv`.
+`frontend/Bob_voice.py` reads these values with `python-dotenv`.
 
 ## Environment Variables
 
 | Variable | Required For | Description |
 | --- | --- | --- |
 | `ELEVENLABS_API_KEY` | ElevenLabs voice design | Your ElevenLabs API key |
-| `PHOEBE_VOICE_ID` | ElevenLabs voice workflows | The selected/generated Phoebe voice ID |
+| `Bob_VOICE_ID` | ElevenLabs voice workflows | The selected/generated Bob voice ID |
 
 ## Running the Application
 
-Start the Electron companion UI:
+Start the Electron companion UI from the project root:
+
+```powershell
+npm start
+```
+
+Or start it from the frontend folder:
 
 ```powershell
 cd frontend
 npm start
 ```
 
+Ask Bob from the bridge directly:
+
+```powershell
+python frontend\Bob_api.py --ask "Hello Bob"
+```
+
 Run the Python voice loop:
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
-python frontend\phoebe_brain.py
+python frontend\Bob_brain.py
+```
+
+Run validation:
+
+```powershell
+npm test
+python -m py_compile frontend\Bob_api.py frontend\Bob_brain.py frontend\Bob_tts.py
 ```
 
 Run the ElevenLabs voice-preview helper only after configuring `frontend/.env`:
 
 ```powershell
-python frontend\phoebe_voice.py
+python frontend\Bob_voice.py
 ```
 
 ## Safety and Privacy
@@ -163,3 +184,5 @@ python frontend\phoebe_voice.py
 - Unified backend service layer
 - Packaged Windows installer
 - Configurable voice/model settings in the UI
+- Deeper desktop automation commands from the Electron UI
+

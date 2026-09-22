@@ -4,7 +4,7 @@ import edge_tts
 import asyncio
 
 # ============================================================
-# PHOEBE — MICROSOFT EDGE TTS
+# BOB - MICROSOFT EDGE TTS
 # ============================================================
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -12,7 +12,7 @@ BASE_DIR = Path(__file__).resolve().parent
 AUDIO_DIR = BASE_DIR / "audio"
 AUDIO_DIR.mkdir(exist_ok=True)
 
-OUTPUT_FILE = AUDIO_DIR / "phoebe_response.mp3"
+OUTPUT_FILE = AUDIO_DIR / "bob_response.mp3"
 
 # Microsoft voice
 VOICE = "en-US-AnaNeural"

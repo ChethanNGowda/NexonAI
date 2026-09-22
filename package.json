@@ -1,5 +1,10 @@
 {
-  "dependencies": {
-    "howler": "^2.2.4"
+  "name": "nexon-ai",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "npm --prefix frontend start",
+    "check": "npm --prefix frontend run check",
+    "test": "npm --prefix frontend test"
   }
 }

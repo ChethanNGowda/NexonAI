@@ -1,248 +1,376 @@
-```css
-#phoebe {
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: transparent;
+    color: #1d2530;
+    font-family: "Segoe UI", Arial, sans-serif;
+    -webkit-app-region: drag;
+}
+
+.window-controls {
     position: absolute;
-    left: 0;
-    top: 0;
+    top: 10px;
+    right: 10px;
+    display: flex;
+    gap: 6px;
+    z-index: 5;
+    -webkit-app-region: no-drag;
+}
+
+.window-button {
+    width: 26px;
+    height: 24px;
+    border: 1px solid rgba(34, 46, 60, 0.18);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.82);
+    color: #253142;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.window-button:hover {
+    background: #ffffff;
+}
+
+.speech-bubble {
+    position: absolute;
+    left: 22px;
+    right: 54px;
+    top: 20px;
+    min-height: 54px;
+    padding: 11px 14px;
+    border: 1px solid rgba(50, 67, 86, 0.12);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 14px 30px rgba(31, 42, 56, 0.12);
+    font-size: 14px;
+    line-height: 1.35;
+    -webkit-app-region: no-drag;
+}
+
+.speech-bubble::after {
+    content: "";
+    position: absolute;
+    left: 68px;
+    bottom: -10px;
+    width: 18px;
+    height: 18px;
+    background: rgba(255, 255, 255, 0.9);
+    border-right: 1px solid rgba(50, 67, 86, 0.12);
+    border-bottom: 1px solid rgba(50, 67, 86, 0.12);
+    transform: rotate(45deg);
+}
+
+.ask-form {
+    position: absolute;
+    left: 22px;
+    right: 22px;
+    top: 94px;
+    display: grid;
+    grid-template-columns: 1fr 34px;
+    gap: 8px;
+    -webkit-app-region: no-drag;
+}
+
+.ask-input {
+    width: 100%;
+    height: 34px;
+    padding: 0 12px;
+    border: 1px solid rgba(34, 46, 60, 0.18);
+    border-radius: 8px;
+    outline: none;
+    background: rgba(255, 255, 255, 0.88);
+    color: #1d2530;
+    font-size: 13px;
+}
+
+.ask-input:focus {
+    border-color: #4b7adf;
+    box-shadow: 0 0 0 3px rgba(75, 122, 223, 0.18);
+}
+
+.ask-button {
+    width: 34px;
+    height: 34px;
+    border: 1px solid rgba(34, 46, 60, 0.18);
+    border-radius: 8px;
+    background: #4b7adf;
+    color: #ffffff;
+    font-size: 15px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.ask-button:disabled,
+.ask-input:disabled {
+    cursor: wait;
+    opacity: 0.7;
+}
+
+#bob {
+    position: absolute;
+    left: 82px;
+    top: 142px;
+    width: 152px;
+    height: 184px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
     will-change: transform;
     user-select: none;
     -webkit-user-drag: none;
-
-    /* Smoother animation rendering */
-    transform-origin: center bottom;
+    -webkit-app-region: no-drag;
 }
 
-/* =========================
-   WALKING
-   ========================= */
+.character {
+    position: relative;
+    width: 152px;
+    height: 184px;
+    filter: drop-shadow(0 18px 14px rgba(35, 45, 58, 0.24));
+}
+
+.head {
+    position: absolute;
+    left: 28px;
+    top: 0;
+    width: 96px;
+    height: 88px;
+    border: 3px solid #243142;
+    border-radius: 44px 44px 38px 38px;
+    background: #ffe6dc;
+    z-index: 3;
+}
+
+.hair {
+    position: absolute;
+    left: -6px;
+    top: -10px;
+    width: 108px;
+    height: 48px;
+    border-radius: 48px 48px 20px 20px;
+    background: #26344a;
+}
+
+.hair::before,
+.hair::after {
+    content: "";
+    position: absolute;
+    bottom: -20px;
+    width: 28px;
+    height: 46px;
+    border-radius: 20px;
+    background: #26344a;
+}
+
+.hair::before {
+    left: 5px;
+    transform: rotate(16deg);
+}
+
+.hair::after {
+    right: 5px;
+    transform: rotate(-16deg);
+}
+
+.eyes {
+    position: absolute;
+    left: 22px;
+    top: 42px;
+    display: flex;
+    width: 52px;
+    justify-content: space-between;
+    color: #4b7adf;
+    font-size: 22px;
+    font-weight: 800;
+}
+
+.mouth {
+    position: absolute;
+    left: 39px;
+    top: 61px;
+    color: #563a3e;
+    font-size: 17px;
+    font-weight: 700;
+}
+
+.body {
+    position: absolute;
+    left: 36px;
+    top: 78px;
+    width: 80px;
+    height: 86px;
+    border: 3px solid #243142;
+    border-radius: 24px 24px 28px 28px;
+    background: #4b7adf;
+    z-index: 2;
+}
+
+.body::after {
+    content: "";
+    position: absolute;
+    left: 18px;
+    top: 24px;
+    width: 38px;
+    height: 46px;
+    border-radius: 14px;
+    background: #f7f8fb;
+    opacity: 0.9;
+}
+
+.scarf {
+    position: absolute;
+    left: 8px;
+    top: 4px;
+    width: 64px;
+    height: 16px;
+    border-radius: 12px;
+    background: #f45b69;
+    z-index: 2;
+}
+
+.arm {
+    position: absolute;
+    top: 22px;
+    width: 22px;
+    height: 54px;
+    border: 3px solid #243142;
+    border-radius: 15px;
+    background: #ffe6dc;
+    z-index: 1;
+}
+
+.arm.left {
+    left: -18px;
+    transform: rotate(18deg);
+}
+
+.arm.right {
+    right: -18px;
+    transform: rotate(-18deg);
+}
+
+.feet {
+    position: absolute;
+    left: 44px;
+    top: 156px;
+    display: flex;
+    gap: 18px;
+    z-index: 1;
+}
+
+.feet span {
+    display: block;
+    width: 28px;
+    height: 18px;
+    border: 3px solid #243142;
+    border-radius: 14px;
+    background: #26344a;
+}
+
+.status {
+    position: absolute;
+    left: 50%;
+    bottom: 16px;
+    min-width: 112px;
+    transform: translateX(-50%);
+    padding: 7px 12px;
+    border: 1px solid rgba(34, 46, 60, 0.16);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.82);
+    color: #34445a;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+    -webkit-app-region: no-drag;
+}
 
 .walking {
-    animation: phoebeWalk 0.55s ease-in-out infinite;
+    animation: bobWalk 0.6s ease-in-out infinite;
 }
-
-@keyframes phoebeWalk {
-    0%, 100% {
-        transform: translateY(0) rotate(0deg);
-    }
-
-    25% {
-        transform: translateY(-2px) rotate(-1deg);
-    }
-
-    50% {
-        transform: translateY(-5px) rotate(0deg);
-    }
-
-    75% {
-        transform: translateY(-2px) rotate(1deg);
-    }
-}
-
-
-/* =========================
-   SITTING
-   ========================= */
 
 .sitting {
-    animation: phoebeSit 2.2s ease-in-out infinite;
+    animation: bobSit 1.8s ease-in-out infinite;
 }
-
-@keyframes phoebeSit {
-    0%, 100% {
-        transform: translateY(0) scaleY(1);
-    }
-
-    50% {
-        transform: translateY(2px) scaleY(0.99);
-    }
-}
-
-
-/* =========================
-   JUMPING
-   ========================= */
 
 .jumping {
-    animation: phoebeJump 0.9s cubic-bezier(0.25, 0.8, 0.25, 1);
+    animation: bobJump 0.9s ease-in-out;
 }
-
-@keyframes phoebeJump {
-    0% {
-        transform: translateY(0) scale(1);
-    }
-
-    20% {
-        transform: translateY(0) scale(0.96, 1.04);
-    }
-
-    40% {
-        transform: translateY(-30px) scale(1.02);
-    }
-
-    60% {
-        transform: translateY(-18px) scale(1);
-    }
-
-    78% {
-        transform: translateY(0) scale(1.03, 0.97);
-    }
-
-    88% {
-        transform: translateY(-5px) scale(1);
-    }
-
-    100% {
-        transform: translateY(0) scale(1);
-    }
-}
-
-
-/* =========================
-   TALKING
-   ========================= */
 
 .talking {
-    animation: phoebeTalking 0.32s ease-in-out infinite;
+    animation: bobTalking 0.35s ease-in-out infinite;
 }
 
-@keyframes phoebeTalking {
-    0%, 100% {
-        transform: translateY(0) scale(1);
-    }
+.talking .mouth {
+    animation: mouthTalk 0.22s steps(2, end) infinite;
+}
 
-    25% {
-        transform: translateY(-1px) scale(1.01);
+@keyframes bobWalk {
+    0%, 100% {
+        transform: translateY(0);
     }
 
     50% {
-        transform: translateY(-3px) scale(1.025);
-    }
-
-    75% {
-        transform: translateY(-1px) scale(1.01);
+        transform: translateY(-3px);
     }
 }
 
-
-/* =========================
-   IDLE / BREATHING
-   ========================= */
-
-.idle {
-    animation: phoebeIdle 3s ease-in-out infinite;
-}
-
-@keyframes phoebeIdle {
+@keyframes bobSit {
     0%, 100% {
-        transform: translateY(0) scale(1);
+        transform: translateY(0);
     }
 
     50% {
-        transform: translateY(-2px) scale(1.01);
+        transform: translateY(2px);
     }
 }
 
-
-/* =========================
-   HAPPY
-   ========================= */
-
-.happy {
-    animation: phoebeHappy 0.7s ease-in-out infinite;
-}
-
-@keyframes phoebeHappy {
-    0%, 100% {
-        transform: translateY(0) rotate(0deg);
-    }
-
-    25% {
-        transform: translateY(-4px) rotate(-2deg);
-    }
-
-    50% {
-        transform: translateY(-7px) rotate(0deg);
-    }
-
-    75% {
-        transform: translateY(-4px) rotate(2deg);
-    }
-}
-
-
-/* =========================
-   SURPRISED
-   ========================= */
-
-.surprised {
-    animation: phoebeSurprised 0.5s ease-out;
-}
-
-@keyframes phoebeSurprised {
+@keyframes bobJump {
     0% {
-        transform: scale(1);
+        transform: translateY(0);
     }
 
     35% {
-        transform: scale(1.08);
+        transform: translateY(-25px);
     }
 
-    65% {
-        transform: scale(0.98);
+    70% {
+        transform: translateY(0);
+    }
+
+    85% {
+        transform: translateY(-5px);
     }
 
     100% {
-        transform: scale(1);
+        transform: translateY(0);
     }
 }
 
-
-/* =========================
-   SLEEPING
-   ========================= */
-
-.sleeping {
-    animation: phoebeSleep 3s ease-in-out infinite;
-}
-
-@keyframes phoebeSleep {
+@keyframes bobTalking {
     0%, 100% {
-        transform: translateY(0) scaleY(1);
+        transform: translateY(0) scale(1);
     }
 
     50% {
-        transform: translateY(2px) scaleY(0.98);
+        transform: translateY(-2px) scale(1.02);
     }
 }
 
+@keyframes mouthTalk {
+    0%, 100% {
+        transform: scaleY(0.7);
+    }
 
-/* =========================
-   SMOOTH STATE CHANGES
-   ========================= */
-
-#phoebe {
-    transition:
-        left 0.25s ease,
-        top 0.25s ease,
-        opacity 0.2s ease;
-}
-
-
-/* =========================
-   REDUCE MOTION
-   ========================= */
-
-@media (prefers-reduced-motion: reduce) {
-    #phoebe,
-    .walking,
-    .sitting,
-    .jumping,
-    .talking,
-    .idle,
-    .happy,
-    .surprised,
-    .sleeping {
-        animation: none !important;
-        transition: none !important;
+    50% {
+        transform: scaleY(1.35);
     }
 }
-```

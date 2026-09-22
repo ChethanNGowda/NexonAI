@@ -7,7 +7,7 @@ VOICE = "en-US-AnaNeural"
 OUTPUT_FILE = os.path.join(
     os.path.dirname(__file__),
     "audio",
-    "phoebe.mp3"
+    "bob.mp3"
 )
 
 
@@ -30,5 +30,5 @@ def speak(text: str):
 
 
 if __name__ == "__main__":
-    speak("Pheepi Chupi! Hello! I'm Nexon!")
+    speak("Hello! I'm Bob from Nexon AI.")
     print(f"Voice generated successfully: {OUTPUT_FILE}")

@@ -8,7 +8,7 @@ CHANNELS = 1
 DURATION = 5
 OUTPUT_FILE = "voice_test.wav"
 
-print("🎤 Speak now for 5 seconds...")
+print("Speak now for 5 seconds...")
 
 audio = sd.rec(
     int(DURATION * SAMPLE_RATE),
@@ -19,7 +19,7 @@ audio = sd.rec(
 
 sd.wait()
 
-print("✅ Recording finished.")
+print("Recording finished.")
 
 with wave.open(OUTPUT_FILE, "wb") as wav:
     wav.setnchannels(CHANNELS)
@@ -27,7 +27,7 @@ with wave.open(OUTPUT_FILE, "wb") as wav:
     wav.setframerate(SAMPLE_RATE)
     wav.writeframes(audio.tobytes())
 
-print("🧠 Loading Whisper...")
+print("Loading Whisper...")
 
 model = WhisperModel(
     "whisper-model",
@@ -35,7 +35,7 @@ model = WhisperModel(
     compute_type="int8"
 )
 
-print("🔎 Transcribing...")
+print("Transcribing...")
 
 segments, info = model.transcribe(
     OUTPUT_FILE,
@@ -48,6 +48,6 @@ for segment in segments:
     text += segment.text
 
 print()
-print("🐾 Phoebe heard:")
+print("Bob heard:")
 print(text.strip())
 print()
