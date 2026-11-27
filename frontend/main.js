@@ -35,6 +35,7 @@ const SETTINGS_FILE     = path.join(app.getPath("userData"), "phoebe_settings.js
 const DEFAULT_SETTINGS  = {
     alwaysOnTop:  true,
     activeModel:  "qwen3-vl:4b",
+    activeVoice:  "en-GB-RyanNeural",
     voiceOutput:  true,
     speechRate:   1.0,
     speechVolume: 100,
@@ -276,9 +277,12 @@ function _daemonCommand(obj) {
 /** Push current settings to a running daemon. */
 function _syncSettingsToDaemon(settings) {
     if (!_daemon) return;
-    _daemonCommand({ cmd: "set_rate",   rate:    settings.speechRate   ?? 1.0 });
-    _daemonCommand({ cmd: "set_volume", volume:  settings.speechVolume ?? 100 });
-    _daemonCommand({ cmd: "set_voice",  enabled: settings.voiceOutput  !== false });
+    _daemonCommand({ cmd: "set_rate",     rate:    settings.speechRate   ?? 1.0 });
+    _daemonCommand({ cmd: "set_volume",   volume:  settings.speechVolume ?? 100 });
+    _daemonCommand({ cmd: "set_voice",    enabled: settings.voiceOutput  !== false });
+    if (settings.activeVoice) {
+        _daemonCommand({ cmd: "set_voice_id", voice: settings.activeVoice });
+    }
     if (settings.activeModel) {
         _daemonCommand({ cmd: "set_model", model: settings.activeModel });
     }
@@ -361,6 +365,7 @@ ipcMain.handle("settings:save", async (_e, newSettings) => {
     if (typeof newSettings.alwaysOnTop  === "boolean") clean.alwaysOnTop  = newSettings.alwaysOnTop;
     if (typeof newSettings.voiceOutput  === "boolean") clean.voiceOutput  = newSettings.voiceOutput;
     if (typeof newSettings.activeModel  === "string")  clean.activeModel  = newSettings.activeModel.slice(0, 64);
+    if (typeof newSettings.activeVoice  === "string")  clean.activeVoice  = newSettings.activeVoice.slice(0, 64);
     if (typeof newSettings.speechRate   === "number")  clean.speechRate   = Math.max(0.5, Math.min(2.0, newSettings.speechRate));
     if (typeof newSettings.speechVolume === "number")  clean.speechVolume = Math.max(0, Math.min(100, Math.round(newSettings.speechVolume)));
 
@@ -505,6 +510,8 @@ ipcMain.handle("assistant:ask", async (_e, payload) => {
     const shouldSpeak = typeof options.voiceOutput === "boolean" ? options.voiceOutput : s.voiceOutput;
     if (shouldSpeak) {
         args.push("--speak");
+        const voiceToUse = options.voice || s.activeVoice;
+        if (voiceToUse) args.push("--voice", String(voiceToUse).slice(0, 64));
         if (typeof s.speechRate === "number") args.push("--rate", String(s.speechRate));
         if (typeof s.speechVolume === "number") args.push("--volume", String(s.speechVolume));
     }
@@ -527,6 +534,8 @@ ipcMain.handle("assistant:research", async (_e, payload) => {
     const shouldSpeak = typeof options.voiceOutput === "boolean" ? options.voiceOutput : s.voiceOutput;
     if (shouldSpeak) {
         args.push("--speak");
+        const voiceToUse = options.voice || s.activeVoice;
+        if (voiceToUse) args.push("--voice", String(voiceToUse).slice(0, 64));
         if (typeof s.speechRate === "number") args.push("--rate", String(s.speechRate));
         if (typeof s.speechVolume === "number") args.push("--volume", String(s.speechVolume));
     }

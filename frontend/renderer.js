@@ -14,6 +14,7 @@ const modelBadge = document.getElementById("modelBadge");
 const settingsDrawer = document.getElementById("settingsDrawer");
 const closeSettingsBtn = document.getElementById("closeSettingsBtn");
 const modelSelect = document.getElementById("modelSelect");
+const voiceSelect = document.getElementById("voiceSelect");
 const alwaysOnTopToggle = document.getElementById("alwaysOnTopToggle");
 const voiceOutputToggle = document.getElementById("voiceOutputToggle");
 const speechRateSlider = document.getElementById("speechRateSlider");
@@ -56,6 +57,7 @@ let voiceControlBusy = false;
 let userSettings = {
     alwaysOnTop: true,
     activeModel: "qwen3-vl:4b",
+    activeVoice: "en-GB-RyanNeural",
     voiceOutput: true,
     speechRate: 1.0,
     speechVolume: 100
@@ -220,6 +222,7 @@ async function initializeSettings() {
     if (speechVolumeSlider) speechVolumeSlider.value = userSettings.speechVolume || 100;
     if (speechVolumeValue) speechVolumeValue.textContent = `${userSettings.speechVolume || 100}%`;
     if (modelBadge) modelBadge.textContent = userSettings.activeModel || "qwen3-vl:4b";
+    if (voiceSelect && userSettings.activeVoice) voiceSelect.value = userSettings.activeVoice;
 
     updatePinButton(userSettings.alwaysOnTop);
 }
@@ -266,6 +269,14 @@ if (modelSelect) {
         userSettings.activeModel = chosen;
         if (modelBadge) modelBadge.textContent = chosen;
         persistSettings({ activeModel: chosen });
+    });
+}
+
+if (voiceSelect) {
+    voiceSelect.addEventListener("change", () => {
+        const chosenVoice = voiceSelect.value;
+        userSettings.activeVoice = chosenVoice;
+        persistSettings({ activeVoice: chosenVoice });
     });
 }
 
@@ -351,6 +362,15 @@ function updateVoiceControlsUI(state) {
     if (state === "error") {
         listenToggleBtn.textContent = "Voice Offline";
         listenToggleBtn.disabled = true;
+        interruptSpeechBtn.disabled = true;
+        reconnectVoiceBtn.classList.remove("hidden");
+        reconnectVoiceBtn.disabled = false;
+        return;
+    }
+
+    if (state === "mic_error") {
+        listenToggleBtn.textContent = "Stop Listening";
+        listenToggleBtn.disabled = false;
         interruptSpeechBtn.disabled = true;
         reconnectVoiceBtn.classList.remove("hidden");
         reconnectVoiceBtn.disabled = false;
@@ -475,6 +495,10 @@ if (api?.onVoiceEvent) {
             } else if (st === "speaking") {
                 setStatus("Speaking");
                 setMood("talking");
+            } else if (st === "mic_error") {
+                setStatus("Mic Unavailable");
+                setMood("sitting");
+                if (evt.detail) setBubble(evt.detail);
             } else if (st === "error") {
                 setStatus("Voice Offline");
                 setMood("sitting");
