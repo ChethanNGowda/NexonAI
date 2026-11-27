@@ -151,6 +151,48 @@ class _StdinCommandReader(threading.Thread):
                     if req_id is not None:
                         _emit({"event": "ack", "request_id": req_id, "cmd": action})
                     continue
+                if action == "emergency_stop":
+                    try:
+                        from backend.automation.guard import trigger_emergency_stop
+                        from backend.voice.tts import stop_audio
+                        stop_audio()
+                        res = trigger_emergency_stop("IPC emergency stop")
+                    except Exception as e:
+                        res = {"ok": False, "message": str(e)}
+                    _emit({"event": "emergency_stop", **res})
+                    if req_id is not None:
+                        _emit({"event": "ack", "request_id": req_id, "cmd": action})
+                    continue
+                if action == "reset_emergency_stop":
+                    try:
+                        from backend.automation.guard import reset_emergency_stop
+                        res = reset_emergency_stop(authorized=bool(cmd.get("authorized", True)))
+                    except Exception as e:
+                        res = {"ok": False, "message": str(e)}
+                    _emit({"event": "emergency_stop_reset", **res})
+                    if req_id is not None:
+                        _emit({"event": "ack", "request_id": req_id, "cmd": action})
+                    continue
+                if action in {"confirm_action", "deny_action"}:
+                    try:
+                        from backend.automation.guard import get_automation_guard
+                        cid = cmd.get("confirmation_id")
+                        guard = get_automation_guard()
+                        decision = guard.confirm_action(cid) if action == "confirm_action" else guard.deny_action(cid)
+                        _emit({
+                            "event": "response",
+                            "answer": decision.message,
+                            "action": action,
+                            "status": decision.status,
+                            "confirmation_id": decision.confirmation_id,
+                            "markdown": decision.message,
+                            "sources": [],
+                        })
+                    except Exception as e:
+                        _emit({"event": "error", "message": str(e)})
+                    if req_id is not None:
+                        _emit({"event": "ack", "request_id": req_id, "cmd": action})
+                    continue
                 with self._lock:
                     self._commands.append(cmd)
                 if req_id is not None and action in {
@@ -481,13 +523,17 @@ def run_voice_loop_ipc(always_listen: bool = False, silent_greeting: bool = Fals
             )
             answer = (res.get("spoken_answer") or res.get("markdown_report")
                       or "Understood, sir.")
-            _emit({
+            resp_evt = {
                 "event": "response",
                 "answer": answer,
                 "action": res.get("action", "chat"),
                 "markdown": res.get("markdown_report", answer),
                 "sources": res.get("sources", []),
-            })
+            }
+            if res.get("requires_confirmation"):
+                resp_evt["requires_confirmation"] = True
+                resp_evt["confirmation_id"] = res.get("confirmation_id", "")
+            _emit(resp_evt)
             if voice_enabled and answer:
                 _emit({"event": "state", "status": "speaking"})
                 try:

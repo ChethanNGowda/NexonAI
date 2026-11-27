@@ -106,7 +106,7 @@ class CentralAssistant:
         else:
             intent_type, cleaned_query = classify_intent(clean_text)
 
-        # 1. Desktop Automation (Instant Zero-Latency Execution)
+        # 1. Desktop Automation (Centralized AutomationGuard)
         if intent_type == "desktop":
             fast_res = handle_fast_intent(clean_text)
             if fast_res is not None:
@@ -118,7 +118,7 @@ class CentralAssistant:
                 self.memory.save_message("user", clean_text, action_type=action_name)
                 self.memory.save_message("assistant", answer, action_type=action_name)
 
-                return {
+                res_payload: Dict[str, Any] = {
                     "ok": True,
                     "action": action_name,
                     "query": clean_text,
@@ -128,6 +128,12 @@ class CentralAssistant:
                     "audio_path": audio_path,
                     "is_exit": (action_name == "exit"),
                 }
+                if action_name == "confirm_required":
+                    from backend.automation.guard import get_automation_guard
+                    cid = get_automation_guard().get_latest_pending_id() or ""
+                    res_payload["requires_confirmation"] = True
+                    res_payload["confirmation_id"] = cid
+                return res_payload
 
         # 2. Deep Research / Quick Search Workflow
         if intent_type in {"deep_research", "quick_search"}:
@@ -239,6 +245,8 @@ def main():
     parser.add_argument("--models", action="store_true", help="List installed local Ollama models")
     parser.add_argument("--clear-memory", action="store_true", help="Clear conversational memory")
     parser.add_argument("--health", action="store_true", help="System health diagnostic")
+    parser.add_argument("--emergency-stop", action="store_true", help="Activate automation emergency stop")
+    parser.add_argument("--reset-emergency-stop", action="store_true", help="Explicitly reset automation emergency stop")
     args = parser.parse_args()
 
     if args.voice is not None:
@@ -249,6 +257,16 @@ def main():
         set_speech_volume(args.volume)
 
     assistant = get_assistant()
+
+    if args.emergency_stop:
+        from backend.automation.guard import trigger_emergency_stop
+        print(json.dumps(trigger_emergency_stop("Triggered via assistant CLI")))
+        return 0
+
+    if args.reset_emergency_stop:
+        from backend.automation.guard import reset_emergency_stop
+        print(json.dumps(reset_emergency_stop(authorized=True)))
+        return 0
 
     if args.models:
         chat_models = assistant.ollama.get_chat_model_names()

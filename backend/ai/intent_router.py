@@ -62,10 +62,38 @@ def classify_intent(query: str) -> Tuple[str, str]:
             return "quick_search", "top sports news and scores today"
         return "quick_search", q
 
-    # 4. Fast Desktop Intent check (e.g. open, volume, screenshot)
-    from backend.core.assistant import handle_fast_intent
-    fast = handle_fast_intent(lower)
-    if fast is not None:
+    # 4. Fast Desktop Intent check (pattern-only; avoids side effects before execution)
+    desktop_prefixes = (
+        "open ", "launch ", "start ", "play ", "close ", "quit ", "kill ", "stop ", "terminate ",
+        "volume ", "raise volume", "lower volume", "increase volume", "decrease volume", "mute", "unmute",
+        "pause", "resume music", "next song", "next track", "skip ", "previous song", "previous track",
+        "screenshot", "capture screen", "lock pc", "lock screen", "lock workstation", "lock computer", "lock my pc",
+        "show desktop", "minimize all", "minimize windows", "hide windows",
+        "run command ", "execute command ",
+        "emergency stop", "trigger emergency stop", "stop all automation", "halt automation",
+        "reset emergency stop", "resume automation", "clear emergency stop",
+        "confirm", "yes proceed", "approve", "deny", "cancel action", "abort", "reject",
+        "what is in my clipboard", "what's in my clipboard", "read clipboard", "clipboard content", "check clipboard",
+        "open latest download", "open recent download", "open last download",
+        "what did i download", "recent downloads", "my downloads list",
+    )
+    desktop_exact = {"exit", "quit", "goodbye", "bye", "shutdown", "sleep", "stop", "go to sleep",
+                     "hello", "hi", "hey", "good morning", "good afternoon", "good evening"}
+    desktop_contains = (
+        "who are you", "your name", "battery", "power level", "charging status", "how much charge",
+        "system status", "hardware status", "system diagnostics", "system stats", "performance",
+        "gpu", "graphics card", "vram", "video card", "storage", "disk space", "hard drive", "free space",
+        "running apps", "active apps", "what is running", "what apps are running", "open apps",
+        "search youtube for", "play on youtube", "youtube search", "search google for", "google search",
+        "on spotify", "spotify search", "spotify play", "to discord", "discord message", "tell discord",
+    )
+    if (
+        lower in desktop_exact
+        or any(lower.startswith(p) for p in desktop_prefixes)
+        or any(k in lower for k in desktop_contains)
+        or ("time" in lower and any(w in lower for w in ("what", "tell", "current", "is", "whats", "now")))
+        or any(w in lower for w in ("date", "day is it", "what day", "today's date", "todays date"))
+    ):
         return "desktop", lower
 
     # 5. Default Conversational Chat

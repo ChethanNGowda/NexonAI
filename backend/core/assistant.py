@@ -88,12 +88,54 @@ def check_wake_word(text: str) -> Tuple[bool, str]:
     return False, lower
 
 
+def _authorize_or_block(action: str, target: str = "") -> Optional[Tuple[str, str]]:
+    """Return an error tuple if blocked by AutomationGuard, else None."""
+    from backend.automation.guard import get_automation_guard
+    decision = get_automation_guard().authorize_safe_action(action, target)
+    if not decision.allowed:
+        return "blocked", decision.message
+    return None
+
+
 def handle_fast_intent(query: str) -> Optional[Tuple[str, str]]:
     """
-    Evaluate instant zero-latency actions.
+    Evaluate instant zero-latency actions through the centralized AutomationGuard.
     Returns (action_type, response_text) or None if no direct action matched.
     """
+    from backend.automation.guard import (
+        get_automation_guard,
+        reset_emergency_stop,
+        trigger_emergency_stop,
+    )
+    from backend.automation.system_control import (
+        close_app_guarded,
+        execute_approved_command_guarded,
+        lock_workstation_guarded,
+    )
+
     q = query.lower().strip(" \t\r\n.?!,;:'\"")
+    guard = get_automation_guard()
+
+    # 0. Emergency Stop & Confirmation Controls
+    if q in {"emergency stop", "trigger emergency stop", "stop all automation", "halt automation"}:
+        res = trigger_emergency_stop("User requested emergency stop")
+        return "emergency_stop", res["message"]
+
+    if q in {"reset emergency stop", "resume automation", "clear emergency stop"}:
+        res = reset_emergency_stop(authorized=True)
+        return "reset_emergency_stop", res["message"]
+
+    confirm_match = re.match(r"^(?:confirm|yes proceed|approve)(?:\s+([a-f0-9]{6,16}))?$", q)
+    if confirm_match and (confirm_match.group(1) or guard.get_latest_pending_id()):
+        cid = confirm_match.group(1)
+        decision = guard.confirm_action(confirmation_id=cid)
+        return ("confirm_action" if decision.allowed else "blocked"), decision.message
+
+    deny_match = re.match(r"^(?:deny|cancel action|abort|reject)(?:\s+([a-f0-9]{6,16}))?$", q)
+    if deny_match and (deny_match.group(1) or guard.get_latest_pending_id()):
+        cid = deny_match.group(1)
+        decision = guard.deny_action(confirmation_id=cid)
+        return "deny_action", decision.message
 
     # 1. Exit / Shutdown
     if q in {"exit", "quit", "goodbye", "bye", "shutdown", "sleep", "stop", "go to sleep"}:
@@ -109,15 +151,24 @@ def handle_fast_intent(query: str) -> Optional[Tuple[str, str]]:
 
     # 4. Time & Date
     if "time" in q and any(w in q for w in ["what", "tell", "current", "is", "whats", "now"]):
+        blocked = _authorize_or_block("time", "system_clock")
+        if blocked:
+            return blocked
         stats = get_system_stats()
         return "time", f"It is currently {stats['time']}, sir."
 
     if any(w in q for w in ["date", "day is it", "what day", "today's date", "todays date"]):
+        blocked = _authorize_or_block("date", "system_clock")
+        if blocked:
+            return blocked
         stats = get_system_stats()
         return "date", f"Today is {stats['date']}, sir."
 
     # 5. System & Battery Diagnostics
     if any(k in q for k in ["battery", "power level", "charging status", "how much charge"]):
+        blocked = _authorize_or_block("battery", "power")
+        if blocked:
+            return blocked
         stats = get_system_stats()
         if stats.get("battery"):
             bat = stats["battery"]
@@ -126,6 +177,9 @@ def handle_fast_intent(query: str) -> Optional[Tuple[str, str]]:
         return "battery", "Battery information is unavailable on this device, sir."
 
     if any(k in q for k in ["system status", "hardware status", "system diagnostics", "cpu", "ram", "system stats", "performance"]):
+        blocked = _authorize_or_block("diagnostics", "system")
+        if blocked:
+            return blocked
         stats = get_system_stats()
         return "diagnostics", format_stats_speech(stats)
 
@@ -157,6 +211,9 @@ def handle_fast_intent(query: str) -> Optional[Tuple[str, str]]:
 
     # 8. Screenshot
     if "screenshot" in q or "capture screen" in q:
+        blocked = _authorize_or_block("screenshot", "display")
+        if blocked:
+            return blocked
         ok, msg = take_screenshot()
         return "screenshot", msg
 
@@ -201,15 +258,21 @@ def handle_fast_intent(query: str) -> Optional[Tuple[str, str]]:
 
     # 10. Screen Lock & Desktop Minimization
     if any(k in q for k in ["lock pc", "lock screen", "lock workstation", "lock computer", "lock my pc"]):
-        ok, msg = lock_workstation()
-        return "lock_pc", msg
+        decision = lock_workstation_guarded()
+        return ("confirm_required" if decision.status == "pending_confirm" else "blocked"), decision.message
 
     if any(k in q for k in ["show desktop", "minimize all", "minimize windows", "hide windows", "minimize all windows"]):
+        blocked = _authorize_or_block("show_desktop", "windows")
+        if blocked:
+            return blocked
         ok, msg = minimize_all_windows()
         return "show_desktop", msg
 
     # 11. Clipboard Inspection
     if any(k in q for k in ["what is in my clipboard", "what's in my clipboard", "read clipboard", "clipboard content", "check clipboard"]):
+        blocked = _authorize_or_block("clipboard", "clipboard")
+        if blocked:
+            return blocked
         clip = get_clipboard_text()
         if clip:
             preview = clip[:150] + ("..." if len(clip) > 150 else "")
@@ -218,12 +281,18 @@ def handle_fast_intent(query: str) -> Optional[Tuple[str, str]]:
 
     # 12. Hardware, GPU & Storage Diagnostics
     if any(k in q for k in ["gpu", "graphics card", "gpu status", "vram", "gpu temperature", "video card"]):
+        blocked = _authorize_or_block("gpu", "nvidia")
+        if blocked:
+            return blocked
         gpu = get_gpu_stats()
         if gpu:
             return "gpu", f"The {gpu['name']} is at {gpu['temperature_c']} degrees Celsius, utilizing {gpu['memory_used_mb']} megabytes of VRAM, sir."
         return "gpu", "NVIDIA GPU metrics are currently unavailable, sir."
 
     if any(k in q for k in ["storage", "disk space", "hard drive", "free space", "drive c"]):
+        blocked = _authorize_or_block("storage", "disks")
+        if blocked:
+            return blocked
         disks = get_all_disks()
         if disks:
             d0 = disks[0]
@@ -231,6 +300,9 @@ def handle_fast_intent(query: str) -> Optional[Tuple[str, str]]:
         return "storage", "Storage information is unavailable, sir."
 
     if any(k in q for k in ["running apps", "active apps", "what is running", "what apps are running", "open apps"]):
+        blocked = _authorize_or_block("running_apps", "processes")
+        if blocked:
+            return blocked
         apps = list_running_apps(limit=6)
         if apps:
             names = [a['name'].replace('.exe', '') for a in apps]
@@ -239,10 +311,16 @@ def handle_fast_intent(query: str) -> Optional[Tuple[str, str]]:
 
     # 13. User Folder Shortcuts & Recent Files
     if any(k in q for k in ["open latest download", "open recent download", "open last download"]):
+        blocked = _authorize_or_block("open_latest", "downloads")
+        if blocked:
+            return blocked
         ok, msg = open_latest_file("downloads")
         return "open_latest", msg
 
     if any(k in q for k in ["what did i download", "recent downloads", "my downloads list"]):
+        blocked = _authorize_or_block("recent_downloads", "downloads")
+        if blocked:
+            return blocked
         recent = get_recent_files("downloads", limit=3)
         if recent:
             names = [r["name"] for r in recent]
@@ -252,16 +330,26 @@ def handle_fast_intent(query: str) -> Optional[Tuple[str, str]]:
     folder_match = re.search(r"^(?:open|show)\s+(?:my\s+)?(downloads|desktop|documents|pictures|videos|music|development|myfiles)\s*(?:folder)?$", q)
     if folder_match:
         target_folder = folder_match.group(1).strip()
+        blocked = _authorize_or_block("open_folder", target_folder)
+        if blocked:
+            return blocked
         ok, msg = open_user_folder(target_folder)
         return "open_folder", msg
 
-    # 14. Close / Terminate Application
+    # 13b. Approved Command Execution (requires validation & confirmation)
+    cmd_match = re.search(r"^(?:run command|execute command)\s+(.+)", query.strip(), flags=re.IGNORECASE)
+    if cmd_match:
+        raw_cmd = cmd_match.group(1).strip()
+        decision = execute_approved_command_guarded(raw_cmd)
+        return ("confirm_required" if decision.status == "pending_confirm" else "blocked"), decision.message
+
+    # 14. Close / Terminate Application (requires confirmation)
     close_match = re.search(r"^(?:close|quit|kill|stop|terminate)\s+(.+)", q)
     if close_match:
         target_app = close_match.group(1).strip(" \t\r\n.?!,;:'\"")
         if target_app not in {"music", "video", "listening"}:
-            ok, msg = close_app(target_app)
-            return "close_app", msg
+            decision = close_app_guarded(target_app)
+            return ("confirm_required" if decision.status == "pending_confirm" else "blocked"), decision.message
 
     # 15. Open App or Launch Game
     open_match = re.search(r"^(?:open|launch|start|play)\s+(.+)", q)
