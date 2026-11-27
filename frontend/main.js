@@ -19,6 +19,23 @@ const fs   = require("fs");
 const path = require("path");
 
 // ─────────────────────────────────────────────────────────────────────────────
+// IPC Input Validation Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+function sanitizeString(str, maxLen = 4000) {
+    if (typeof str !== "string") return "";
+    return str.replace(/\0/g, "").slice(0, maxLen);
+}
+function validateModelName(name) {
+    return typeof name === "string" && /^[a-zA-Z0-9:.\-]{1,80}$/.test(name);
+}
+function validateVoiceId(id) {
+    return typeof id === "string" && /^[a-zA-Z0-9\-]{1,80}$/.test(id);
+}
+function validateConfirmationId(id) {
+    return typeof id === "string" && /^[a-f0-9\-]{8,64}$/.test(id);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Paths
 // ─────────────────────────────────────────────────────────────────────────────
 const ROOT_DIR     = path.dirname(__dirname);
@@ -84,6 +101,7 @@ function createWindow() {
             preload:          path.join(__dirname, "preload.js"),
             nodeIntegration:  false,
             contextIsolation: true,
+            webSecurity:      true,
         },
     });
 
@@ -364,8 +382,18 @@ ipcMain.handle("settings:save", async (_e, newSettings) => {
     const clean = {};
     if (typeof newSettings.alwaysOnTop  === "boolean") clean.alwaysOnTop  = newSettings.alwaysOnTop;
     if (typeof newSettings.voiceOutput  === "boolean") clean.voiceOutput  = newSettings.voiceOutput;
-    if (typeof newSettings.activeModel  === "string")  clean.activeModel  = newSettings.activeModel.slice(0, 64);
-    if (typeof newSettings.activeVoice  === "string")  clean.activeVoice  = newSettings.activeVoice.slice(0, 64);
+    if (typeof newSettings.activeModel  === "string") {
+        if (!validateModelName(newSettings.activeModel)) {
+            return { ok: false, error: "Invalid model name." };
+        }
+        clean.activeModel = newSettings.activeModel;
+    }
+    if (typeof newSettings.activeVoice  === "string") {
+        if (!validateVoiceId(newSettings.activeVoice)) {
+            return { ok: false, error: "Invalid voice ID." };
+        }
+        clean.activeVoice = newSettings.activeVoice;
+    }
     if (typeof newSettings.speechRate   === "number")  clean.speechRate   = Math.max(0.5, Math.min(2.0, newSettings.speechRate));
     if (typeof newSettings.speechVolume === "number")  clean.speechVolume = Math.max(0, Math.min(100, Math.round(newSettings.speechVolume)));
 
@@ -497,21 +525,31 @@ function _runWorker(args, timeoutMs = 120000) {
 ipcMain.handle("assistant:ask", async (_e, payload) => {
     let text = "", options = {};
     if (typeof payload === "string") {
-        text = payload.trim();
+        text = sanitizeString(payload).trim();
     } else if (payload && typeof payload === "object") {
-        text = String(payload.message || payload.query || "").trim();
+        text = sanitizeString(payload.message || payload.query || "").trim();
         options = payload;
     }
     if (!text) return { ok: false, error: "Please ask a question, sir." };
 
     const s = loadSettingsSync();
+    const model = options.model !== undefined ? options.model : (s.activeModel || "qwen3-vl:4b");
+    if (!validateModelName(model)) {
+        return { ok: false, error: "Invalid model name." };
+    }
+
     const args = ["--ask", text];
-    args.push("--model", String(options.model || s.activeModel || "qwen3-vl:4b").slice(0, 64));
+    args.push("--model", model);
     const shouldSpeak = typeof options.voiceOutput === "boolean" ? options.voiceOutput : s.voiceOutput;
     if (shouldSpeak) {
         args.push("--speak");
-        const voiceToUse = options.voice || s.activeVoice;
-        if (voiceToUse) args.push("--voice", String(voiceToUse).slice(0, 64));
+        const voiceToUse = options.voice !== undefined ? options.voice : s.activeVoice;
+        if (voiceToUse) {
+            if (!validateVoiceId(voiceToUse)) {
+                return { ok: false, error: "Invalid voice ID." };
+            }
+            args.push("--voice", voiceToUse);
+        }
         if (typeof s.speechRate === "number") args.push("--rate", String(s.speechRate));
         if (typeof s.speechVolume === "number") args.push("--volume", String(s.speechVolume));
     }
@@ -521,21 +559,31 @@ ipcMain.handle("assistant:ask", async (_e, payload) => {
 ipcMain.handle("assistant:research", async (_e, payload) => {
     let text = "", options = {};
     if (typeof payload === "string") {
-        text = payload.trim();
+        text = sanitizeString(payload).trim();
     } else if (payload && typeof payload === "object") {
-        text = String(payload.query || payload.message || "").trim();
+        text = sanitizeString(payload.query || payload.message || "").trim();
         options = payload;
     }
     if (!text) return { ok: false, error: "Please specify a research topic, sir." };
 
     const s = loadSettingsSync();
+    const model = options.model !== undefined ? options.model : (s.activeModel || "qwen3-vl:4b");
+    if (!validateModelName(model)) {
+        return { ok: false, error: "Invalid model name." };
+    }
+
     const args = ["--research", text];
-    args.push("--model", String(options.model || s.activeModel || "qwen3-vl:4b").slice(0, 64));
+    args.push("--model", model);
     const shouldSpeak = typeof options.voiceOutput === "boolean" ? options.voiceOutput : s.voiceOutput;
     if (shouldSpeak) {
         args.push("--speak");
-        const voiceToUse = options.voice || s.activeVoice;
-        if (voiceToUse) args.push("--voice", String(voiceToUse).slice(0, 64));
+        const voiceToUse = options.voice !== undefined ? options.voice : s.activeVoice;
+        if (voiceToUse) {
+            if (!validateVoiceId(voiceToUse)) {
+                return { ok: false, error: "Invalid voice ID." };
+            }
+            args.push("--voice", voiceToUse);
+        }
         if (typeof s.speechRate === "number") args.push("--rate", String(s.speechRate));
         if (typeof s.speechVolume === "number") args.push("--volume", String(s.speechVolume));
     }
@@ -572,17 +620,35 @@ ipcMain.handle("automation:reset_emergency_stop", async () => {
 });
 
 ipcMain.handle("automation:confirm", async (_e, id) => {
-    const cleanId = typeof id === "string" ? id.replace(/[^a-f0-9]/gi, "").slice(0, 16) : "";
+    if (id !== undefined && id !== null && id !== "") {
+        if (!validateConfirmationId(id)) {
+            return { ok: false, error: "Invalid confirmation ID." };
+        }
+    }
+    const cleanId = typeof id === "string" ? id : "";
     _daemonCommand({ cmd: "confirm_action", confirmation_id: cleanId || undefined });
     return { ok: true, confirmation_id: cleanId };
 });
 
 ipcMain.handle("automation:deny", async (_e, id) => {
-    const cleanId = typeof id === "string" ? id.replace(/[^a-f0-9]/gi, "").slice(0, 16) : "";
+    if (id !== undefined && id !== null && id !== "") {
+        if (!validateConfirmationId(id)) {
+            return { ok: false, error: "Invalid confirmation ID." };
+        }
+    }
+    const cleanId = typeof id === "string" ? id : "";
     _daemonCommand({ cmd: "deny_action", confirmation_id: cleanId || undefined });
     return { ok: true, confirmation_id: cleanId };
 });
 
 // Legacy aliases
-ipcMain.handle("bob:ask",    (_e, msg) => _runWorker(["--ask", String(msg || "").trim()]));
-ipcMain.handle("jarvis:ask", (_e, msg) => _runWorker(["--ask", String(msg || "").trim()]));
+ipcMain.handle("bob:ask", (_e, msg) => {
+    const text = sanitizeString(msg).trim();
+    if (!text) return { ok: false, error: "Please ask a question, sir." };
+    return _runWorker(["--ask", text]);
+});
+ipcMain.handle("jarvis:ask", (_e, msg) => {
+    const text = sanitizeString(msg).trim();
+    if (!text) return { ok: false, error: "Please ask a question, sir." };
+    return _runWorker(["--ask", text]);
+});

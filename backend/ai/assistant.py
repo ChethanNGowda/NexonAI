@@ -13,9 +13,26 @@ import argparse
 import json
 import logging
 import os
+import re as _re
 import sys
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
+
+_SECRET_PATTERN = _re.compile(
+    r'(sk-[A-Za-z0-9]{10,}|AIza[A-Za-z0-9_\-]{30,}|Bearer\s+[A-Za-z0-9._\-]{10,}|password\s*=\s*\S+)',
+    _re.IGNORECASE
+)
+
+
+def _safe_error_msg(exc: BaseException) -> str:
+    """Return a sanitized error message safe to send to the renderer."""
+    raw = str(exc)
+    sanitized = _SECRET_PATTERN.sub("[REDACTED]", raw)
+    # Also strip env var expansions
+    for key, val in os.environ.items():
+        if val and len(val) > 5:
+            sanitized = sanitized.replace(val, "[REDACTED]")
+    return sanitized[:300]
 
 # Ensure project root is in sys.path
 _ROOT = Path(__file__).resolve().parent.parent.parent
@@ -249,73 +266,78 @@ def main():
     parser.add_argument("--reset-emergency-stop", action="store_true", help="Explicitly reset automation emergency stop")
     args = parser.parse_args()
 
-    if args.voice is not None:
-        set_voice_id(args.voice)
-    if args.rate is not None:
-        set_speech_rate(args.rate)
-    if args.volume is not None:
-        set_speech_volume(args.volume)
+    try:
+        if args.voice is not None:
+            set_voice_id(args.voice)
+        if args.rate is not None:
+            set_speech_rate(args.rate)
+        if args.volume is not None:
+            set_speech_volume(args.volume)
 
-    assistant = get_assistant()
+        assistant = get_assistant()
 
-    if args.emergency_stop:
-        from backend.automation.guard import trigger_emergency_stop
-        print(json.dumps(trigger_emergency_stop("Triggered via assistant CLI")))
-        return 0
+        if args.emergency_stop:
+            from backend.automation.guard import trigger_emergency_stop
+            print(json.dumps(trigger_emergency_stop("Triggered via assistant CLI")))
+            return 0
 
-    if args.reset_emergency_stop:
-        from backend.automation.guard import reset_emergency_stop
-        print(json.dumps(reset_emergency_stop(authorized=True)))
-        return 0
+        if args.reset_emergency_stop:
+            from backend.automation.guard import reset_emergency_stop
+            print(json.dumps(reset_emergency_stop(authorized=True)))
+            return 0
 
-    if args.models:
-        chat_models = assistant.ollama.get_chat_model_names()
-        embed_models = assistant.ollama.get_embedding_model_names()
-        print(json.dumps({
-            "ok": True,
-            "installed_models": chat_models,
-            "embedding_models": embed_models,
-        }))
-        return 0
+        if args.models:
+            chat_models = assistant.ollama.get_chat_model_names()
+            embed_models = assistant.ollama.get_embedding_model_names()
+            print(json.dumps({
+                "ok": True,
+                "installed_models": chat_models,
+                "embedding_models": embed_models,
+            }))
+            return 0
 
-    if args.clear_memory:
-        assistant.memory.clear_all()
-        print(json.dumps({"ok": True, "message": "Memory cleared."}))
-        return 0
+        if args.clear_memory:
+            assistant.memory.clear_all()
+            print(json.dumps({"ok": True, "message": "Memory cleared."}))
+            return 0
 
-    if args.health:
-        from backend.automation.system_control import get_system_stats
-        stats = get_system_stats()
-        ollama_ok = assistant.ollama.is_available()
-        print(json.dumps({
-            "ok": True,
-            "assistant": "Phoebe / Jarvis",
-            "ollama_connected": ollama_ok,
-            "stats": stats,
-        }))
-        return 0
+        if args.health:
+            from backend.automation.system_control import get_system_stats
+            stats = get_system_stats()
+            ollama_ok = assistant.ollama.is_available()
+            print(json.dumps({
+                "ok": True,
+                "assistant": "Phoebe / Jarvis",
+                "ollama_connected": ollama_ok,
+                "stats": stats,
+            }))
+            return 0
 
-    if args.research:
-        def on_prog(step, detail):
-            print(f"[PROGRESS] {step}: {detail}", file=sys.stderr)
+        if args.research:
+            def on_prog(step, detail):
+                print(f"[PROGRESS] {step}: {detail}", file=sys.stderr)
 
-        res = assistant.process(
-            args.research,
-            play_speech=args.speak,
-            force_mode="deep_research",
-            progress_callback=on_prog,
-            model_override=args.model,
-        )
-        print(json.dumps(res, indent=2))
-        return 0
+            res = assistant.process(
+                args.research,
+                play_speech=args.speak,
+                force_mode="deep_research",
+                progress_callback=on_prog,
+                model_override=args.model,
+            )
+            print(json.dumps(res, indent=2))
+            return 0
 
-    if args.ask:
-        res = assistant.process(args.ask, play_speech=args.speak, model_override=args.model)
-        print(json.dumps(res))
-        return 0
+        if args.ask:
+            res = assistant.process(args.ask, play_speech=args.speak, model_override=args.model)
+            print(json.dumps(res))
+            return 0
 
-    parser.print_help()
-    return 1
+        parser.print_help()
+        return 1
+    except Exception as e:
+        logger.exception("Unhandled error in assistant CLI")
+        print(json.dumps({"ok": False, "error": _safe_error_msg(e)}))
+        return 1
 
 
 if __name__ == "__main__":
