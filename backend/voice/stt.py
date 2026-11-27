@@ -53,7 +53,7 @@ class SpeechRecognizer:
         stt_model = model_name or os.getenv("JARVIS_STT_MODEL", "base.en").strip()
         threads = min(6, os.cpu_count() or 4)
 
-        print(f"[Jarvis STT] Initializing speech engine with model '{stt_model}' ({threads} CPU threads)...")
+        print(f"[Jarvis STT] Initializing speech engine with model '{stt_model}' ({threads} CPU threads)...", file=sys.stderr)
         self.model = WhisperModel(
             stt_model,
             device="cpu",
@@ -61,7 +61,7 @@ class SpeechRecognizer:
             cpu_threads=threads,
         )
         self.model_name = stt_model
-        print(f"[Jarvis STT] Google Voice-grade speech recognition ready ({stt_model}).")
+        print(f"[Jarvis STT] Google Voice-grade speech recognition ready ({stt_model}).", file=sys.stderr)
 
     def _normalize_audio(self, audio_int16: np.ndarray) -> np.ndarray:
         """Apply DC-offset removal and peak normalization to float32."""

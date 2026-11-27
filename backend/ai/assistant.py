@@ -35,7 +35,7 @@ from backend.ai.prompts import get_system_prompt
 from backend.core.assistant import handle_fast_intent
 from backend.memory.memory_manager import get_memory_manager
 from backend.research.research_agent import get_research_agent
-from backend.voice.tts import speak
+from backend.voice.tts import speak, set_speech_rate, set_speech_volume
 
 logger = logging.getLogger(__name__)
 
@@ -179,11 +179,18 @@ def main():
     parser.add_argument("--ask", type=str, help="Process a user query or command")
     parser.add_argument("--research", type=str, help="Run deep research on a topic")
     parser.add_argument("--speak", action="store_true", help="Play audio response aloud")
+    parser.add_argument("--rate", type=float, default=None, help="Speech rate multiplier (0.5-2.0)")
+    parser.add_argument("--volume", type=int, default=None, help="Speech volume (0-100)")
     parser.add_argument("--model", type=str, default=None, help="Ollama model override")
     parser.add_argument("--models", action="store_true", help="List installed local Ollama models")
     parser.add_argument("--clear-memory", action="store_true", help="Clear conversational memory")
     parser.add_argument("--health", action="store_true", help="System health diagnostic")
     args = parser.parse_args()
+
+    if args.rate is not None:
+        set_speech_rate(args.rate)
+    if args.volume is not None:
+        set_speech_volume(args.volume)
 
     assistant = get_assistant()
 
