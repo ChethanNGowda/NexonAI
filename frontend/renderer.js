@@ -26,6 +26,7 @@ const clearMemoryBtn = document.getElementById("clearMemoryBtn");
 // Voice Controls UI
 const listenToggleBtn = document.getElementById("listenToggleBtn");
 const interruptSpeechBtn = document.getElementById("interruptSpeechBtn");
+const emergencyStopBtn = document.getElementById("emergencyStopBtn");
 const reconnectVoiceBtn = document.getElementById("reconnectVoiceBtn");
 
 // Mode buttons
@@ -446,6 +447,19 @@ if (interruptSpeechBtn) {
             console.error("Interrupt speech failed:", e);
         } finally {
             voiceControlBusy = false;
+        }
+    });
+}
+
+if (emergencyStopBtn) {
+    emergencyStopBtn.addEventListener("click", async () => {
+        try {
+            const res = await api?.emergencyStop?.();
+            setMood("sitting");
+            setStatus("E-Stop Active");
+            setBubble(res?.message || "Emergency stop activated. Say 'reset emergency stop' to resume.");
+        } catch (e) {
+            console.error("Emergency stop failed:", e);
         }
     });
 }

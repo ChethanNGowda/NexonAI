@@ -53,6 +53,12 @@ const api = {
     startListening:  () => ipcRenderer.invoke("voice:start_listening"),
     restartDaemon:   () => ipcRenderer.invoke("voice:restart_daemon"),
 
+    // ── Safe automation controls ─────────────────────────────────────────────
+    emergencyStop:      ()   => ipcRenderer.invoke("automation:emergency_stop"),
+    resetEmergencyStop: ()   => ipcRenderer.invoke("automation:reset_emergency_stop"),
+    confirmAction:      (id) => ipcRenderer.invoke("automation:confirm", id),
+    denyAction:         (id) => ipcRenderer.invoke("automation:deny", id),
+
     // ── Event subscriptions ───────────────────────────────────────────────────
     onProgress: (callback) => {
         const handler = (_e, data) => callback(data);

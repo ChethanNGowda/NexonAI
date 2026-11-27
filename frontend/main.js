@@ -556,6 +556,33 @@ ipcMain.handle("assistant:get_models", async ()    => _runWorker(["--models"]));
 ipcMain.handle("assistant:clear_memory", async () => _runWorker(["--clear-memory"]));
 ipcMain.handle("assistant:health",  async ()       => _runWorker(["--health"]));
 
+// Automation safety & emergency-stop IPC
+ipcMain.handle("automation:emergency_stop", async () => {
+    _daemonCommand({ cmd: "emergency_stop" });
+    if (_currentWorker) {
+        _killTree(_currentWorker);
+        _currentWorker = null;
+    }
+    return _runWorker(["--emergency-stop"]);
+});
+
+ipcMain.handle("automation:reset_emergency_stop", async () => {
+    _daemonCommand({ cmd: "reset_emergency_stop", authorized: true });
+    return _runWorker(["--reset-emergency-stop"]);
+});
+
+ipcMain.handle("automation:confirm", async (_e, id) => {
+    const cleanId = typeof id === "string" ? id.replace(/[^a-f0-9]/gi, "").slice(0, 16) : "";
+    _daemonCommand({ cmd: "confirm_action", confirmation_id: cleanId || undefined });
+    return { ok: true, confirmation_id: cleanId };
+});
+
+ipcMain.handle("automation:deny", async (_e, id) => {
+    const cleanId = typeof id === "string" ? id.replace(/[^a-f0-9]/gi, "").slice(0, 16) : "";
+    _daemonCommand({ cmd: "deny_action", confirmation_id: cleanId || undefined });
+    return { ok: true, confirmation_id: cleanId };
+});
+
 // Legacy aliases
 ipcMain.handle("bob:ask",    (_e, msg) => _runWorker(["--ask", String(msg || "").trim()]));
 ipcMain.handle("jarvis:ask", (_e, msg) => _runWorker(["--ask", String(msg || "").trim()]));
