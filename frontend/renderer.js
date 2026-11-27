@@ -1,4 +1,4 @@
-const bob = document.getElementById("bob");
+const bobAvatar = document.getElementById("bob");
 const speech = document.getElementById("speech");
 const statusLabel = document.getElementById("status");
 const minimizeBtn = document.getElementById("minimizeBtn");
@@ -81,8 +81,8 @@ function setBubble(text) {
 }
 
 function setMood(mood) {
-    bob.classList.remove("walking", "sitting", "jumping", "talking");
-    bob.classList.add(mood);
+    bobAvatar.classList.remove("walking", "sitting", "jumping", "talking");
+    bobAvatar.classList.add(mood);
 }
 
 function setMode(mode) {
@@ -627,7 +627,7 @@ async function askBackend(message) {
     }
 }
 
-bob.addEventListener("click", () => {
+bobAvatar.addEventListener("click", () => {
     const reply = idleReplies[Math.floor(Math.random() * idleReplies.length)];
     setBubble(reply);
 });
