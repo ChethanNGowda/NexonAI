@@ -2,23 +2,66 @@ const bob = document.getElementById("bob");
 const speech = document.getElementById("speech");
 const statusLabel = document.getElementById("status");
 const minimizeBtn = document.getElementById("minimizeBtn");
+const maximizeBtn = document.getElementById("maximizeBtn");
 const closeBtn = document.getElementById("closeBtn");
+const pinBtn = document.getElementById("pinBtn");
+const settingsBtn = document.getElementById("settingsBtn");
 const askForm = document.getElementById("askForm");
 const askInput = document.getElementById("askInput");
+const modelBadge = document.getElementById("modelBadge");
 
-const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+// Settings Drawer Elements
+const settingsDrawer = document.getElementById("settingsDrawer");
+const closeSettingsBtn = document.getElementById("closeSettingsBtn");
+const modelSelect = document.getElementById("modelSelect");
+const alwaysOnTopToggle = document.getElementById("alwaysOnTopToggle");
+const voiceOutputToggle = document.getElementById("voiceOutputToggle");
+const speechRateSlider = document.getElementById("speechRateSlider");
+const speechRateValue = document.getElementById("speechRateValue");
+const speechVolumeSlider = document.getElementById("speechVolumeSlider");
+const speechVolumeValue = document.getElementById("speechVolumeValue");
+const clearMemoryBtn = document.getElementById("clearMemoryBtn");
 
-let recognition = null;
-let listening = false;
-let shouldListen = true;
+// Mode buttons
+const modeChat = document.getElementById("modeChat");
+const modeSearch = document.getElementById("modeSearch");
+const modeResearch = document.getElementById("modeResearch");
+
+// Research UI
+const researchPanel = document.getElementById("researchPanel");
+const researchStepLabel = document.getElementById("researchStepLabel");
+const researchDetail = document.getElementById("researchDetail");
+const progressFill = document.getElementById("progressFill");
+const cancelResearchBtn = document.getElementById("cancelResearchBtn");
+
+// Sources Drawer
+const sourcesDrawer = document.getElementById("sourcesDrawer");
+const sourcesList = document.getElementById("sourcesList");
+const closeDrawerBtn = document.getElementById("closeDrawerBtn");
+const copyAnswerBtn = document.getElementById("copyAnswerBtn");
+
 let actionTimer = null;
+let currentMode = "chat"; // "chat" | "search" | "research"
+let lastMarkdownReport = "";
+let isWindowMaximized = false;
+
+// Active User Settings State
+let userSettings = {
+    alwaysOnTop: true,
+    activeModel: "qwen3-vl:4b",
+    voiceOutput: true,
+    speechRate: 1.0,
+    speechVolume: 100
+};
 
 const idleReplies = [
-    "I'm here.",
-    "Ready when you are.",
-    "Say Bob if you need me.",
-    "I'm keeping an eye on things."
+    "I'm here, ready whenever you need me.",
+    "All systems nominal. What would you like to investigate?",
+    "Say Phoebe or Jarvis if you need assistance.",
+    "Standing by, sir."
 ];
+
+const api = window.phoebe || window.jarvis || window.bob;
 
 function setStatus(text) {
     statusLabel.textContent = text;
@@ -33,217 +76,418 @@ function setMood(mood) {
     bob.classList.add(mood);
 }
 
+function setMode(mode) {
+    currentMode = mode;
+    modeChat.classList.toggle("active", mode === "chat");
+    modeSearch.classList.toggle("active", mode === "search");
+    modeResearch.classList.toggle("active", mode === "research");
+
+    if (mode === "research") {
+        askInput.placeholder = "Enter deep research topic...";
+    } else if (mode === "search") {
+        askInput.placeholder = "Search the live web...";
+    } else {
+        askInput.placeholder = "Ask Phoebe or say 'Phoebe' aloud...";
+    }
+}
+
+modeChat.addEventListener("click", () => setMode("chat"));
+modeSearch.addEventListener("click", () => setMode("search"));
+modeResearch.addEventListener("click", () => setMode("research"));
+
 function scheduleNextAction() {
     clearTimeout(actionTimer);
-
     actionTimer = setTimeout(() => {
         const actions = ["sitting", "walking", "jumping"];
         const mood = actions[Math.floor(Math.random() * actions.length)];
-
         setMood(mood);
-
         if (mood === "jumping") {
             setTimeout(() => setMood("sitting"), 950);
         }
-
         scheduleNextAction();
-    }, 3000 + Math.random() * 4000);
+    }, 4000 + Math.random() * 5000);
 }
 
-function startRecognition() {
-    if (!recognition || listening || !shouldListen) {
-        return;
-    }
+// ============================================================
+// WINDOW CONTROLS (Maximize, Minimize, Pin, Close)
+// ============================================================
 
+minimizeBtn.addEventListener("click", () => {
+    api?.minimize();
+});
+
+closeBtn.addEventListener("click", () => {
+    api?.close();
+});
+
+if (maximizeBtn) {
+    maximizeBtn.addEventListener("click", async () => {
+        try {
+            const res = await api?.maximize();
+            isWindowMaximized = !!res?.isMaximized;
+            maximizeBtn.textContent = isWindowMaximized ? "❐" : "□";
+        } catch (e) {
+            console.error("Maximize error:", e);
+        }
+    });
+}
+
+if (api?.onMaximizedChange && maximizeBtn) {
+    api.onMaximizedChange((isMax) => {
+        isWindowMaximized = isMax;
+        maximizeBtn.textContent = isMax ? "❐" : "□";
+    });
+}
+
+function updatePinButton(isPinned) {
+    if (!pinBtn) return;
+    if (isPinned) {
+        pinBtn.classList.add("pinned");
+        pinBtn.classList.remove("unpinned");
+        pinBtn.title = "Always on Top: ON (Click to unpin)";
+    } else {
+        pinBtn.classList.add("unpinned");
+        pinBtn.classList.remove("pinned");
+        pinBtn.title = "Always on Top: OFF (Click to pin)";
+    }
+}
+
+if (pinBtn) {
+    pinBtn.addEventListener("click", async () => {
+        try {
+            const nextState = !userSettings.alwaysOnTop;
+            const res = await api?.toggleAlwaysOnTop(nextState);
+            userSettings.alwaysOnTop = res?.alwaysOnTop ?? nextState;
+            updatePinButton(userSettings.alwaysOnTop);
+            if (alwaysOnTopToggle) {
+                alwaysOnTopToggle.checked = userSettings.alwaysOnTop;
+            }
+            await api?.saveSettings({ alwaysOnTop: userSettings.alwaysOnTop });
+        } catch (e) {
+            console.error("Pin toggle error:", e);
+        }
+    });
+}
+
+// ============================================================
+// SETTINGS DRAWER & PERSISTENCE
+// ============================================================
+
+if (settingsBtn) {
+    settingsBtn.addEventListener("click", () => {
+        sourcesDrawer.classList.add("hidden");
+        settingsDrawer.classList.toggle("hidden");
+    });
+}
+
+if (closeSettingsBtn) {
+    closeSettingsBtn.addEventListener("click", () => {
+        settingsDrawer.classList.add("hidden");
+    });
+}
+
+async function persistSettings(newVals) {
+    userSettings = { ...userSettings, ...newVals };
     try {
-        recognition.start();
-    } catch (error) {
-        console.log("Could not start speech recognition:", error.message);
+        await api?.saveSettings(userSettings);
+    } catch (e) {
+        console.error("Save settings error:", e);
     }
 }
 
-function stopRecognition() {
-    shouldListen = false;
-
-    if (recognition && listening) {
-        recognition.stop();
-    }
-
-    listening = false;
-    setStatus("Paused");
-}
-
-function setupRecognition() {
-    if (!SpeechRecognition) {
-        setStatus("Click Bob to talk");
-        return;
-    }
-
-    recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = false;
-    recognition.lang = "en-US";
-
-    recognition.onstart = () => {
-        listening = true;
-        setStatus("Listening");
-    };
-
-    recognition.onend = () => {
-        listening = false;
-
-        if (shouldListen) {
-            setStatus("Restarting");
-            setTimeout(startRecognition, 700);
+async function initializeSettings() {
+    try {
+        const res = await api?.loadSettings();
+        if (res?.settings) {
+            userSettings = { ...userSettings, ...res.settings };
         }
-    };
+    } catch (e) {
+        console.error("Load settings error:", e);
+    }
 
-    recognition.onerror = (event) => {
-        console.log("Voice error:", event.error);
-        setStatus(event.error === "not-allowed" ? "Mic blocked" : "Voice retrying");
-    };
+    // Apply to UI
+    if (alwaysOnTopToggle) alwaysOnTopToggle.checked = !!userSettings.alwaysOnTop;
+    if (voiceOutputToggle) voiceOutputToggle.checked = !!userSettings.voiceOutput;
+    if (speechRateSlider) speechRateSlider.value = userSettings.speechRate || 1.0;
+    if (speechRateValue) speechRateValue.textContent = `${Number(userSettings.speechRate || 1.0).toFixed(2)}x`;
+    if (speechVolumeSlider) speechVolumeSlider.value = userSettings.speechVolume || 100;
+    if (speechVolumeValue) speechVolumeValue.textContent = `${userSettings.speechVolume || 100}%`;
+    if (modelBadge) modelBadge.textContent = userSettings.activeModel || "qwen3-vl:4b";
 
-    recognition.onresult = (event) => {
-        const result = event.results[event.results.length - 1][0].transcript
-            .trim()
-            .toLowerCase();
-
-        console.log("You said:", result);
-        handleBobCommand(result);
-    };
-
-    startRecognition();
+    updatePinButton(userSettings.alwaysOnTop);
 }
 
-function handleBobCommand(command) {
-    if (!command) {
-        return;
-    }
+// Dynamic Model Discovery from Ollama
+async function loadInstalledModels() {
+    try {
+        const res = await api?.getModels();
+        const models = res?.installed_models || [];
 
-    if (command.includes("stop listening")) {
-        speakBob("Okay, I'll stay quiet for now.");
-        stopRecognition();
-        return;
-    }
+        if (modelSelect) {
+            modelSelect.innerHTML = "";
+            if (models.length === 0) {
+                const opt = document.createElement("option");
+                opt.value = userSettings.activeModel || "qwen3-vl:4b";
+                opt.textContent = `${userSettings.activeModel || "qwen3-vl:4b"} (Default)`;
+                modelSelect.appendChild(opt);
+            } else {
+                models.forEach((m) => {
+                    const opt = document.createElement("option");
+                    opt.value = m;
+                    opt.textContent = m.includes("vl") ? `${m} (Vision)` : m;
+                    modelSelect.appendChild(opt);
+                });
+            }
 
-    if (command.includes("start listening") || command.includes("wake up")) {
-        shouldListen = true;
-        startRecognition();
-        speakBob("I'm listening again.");
-        return;
-    }
-
-    if (command.includes("hello") || command.includes("hi")) {
-        speakBob("Hello! I'm Bob.");
-        return;
-    }
-
-    if (
-        command.includes("what can you do") ||
-        command.includes("what can you") ||
-        command.includes("help me")
-    ) {
-        speakBob("I can listen, answer simple commands, and sit on your desktop while the Python assistant handles deeper voice tasks.");
-        return;
-    }
-
-    if (command.includes("who are you") || command.includes("your name")) {
-        speakBob("I'm Bob, your Nexon AI desktop companion.");
-        return;
-    }
-
-    if (command.includes("bob")) {
-        const prompt = command.replace(/\bbob\b/g, "").trim();
-
-        if (!prompt) {
-            speakBob("I'm here. What are we doing?");
-            return;
+            if (userSettings.activeModel) {
+                modelSelect.value = userSettings.activeModel;
+            } else if (models.length > 0) {
+                userSettings.activeModel = models[0];
+                modelSelect.value = models[0];
+            }
+            if (modelBadge) modelBadge.textContent = userSettings.activeModel;
         }
-
-        askBackend(prompt);
+    } catch (e) {
+        console.log("Could not load models:", e);
     }
+}
+
+// Settings Change Listeners
+if (modelSelect) {
+    modelSelect.addEventListener("change", () => {
+        const chosen = modelSelect.value;
+        userSettings.activeModel = chosen;
+        if (modelBadge) modelBadge.textContent = chosen;
+        persistSettings({ activeModel: chosen });
+    });
+}
+
+if (alwaysOnTopToggle) {
+    alwaysOnTopToggle.addEventListener("change", async () => {
+        const flag = alwaysOnTopToggle.checked;
+        userSettings.alwaysOnTop = flag;
+        updatePinButton(flag);
+        await api?.toggleAlwaysOnTop(flag);
+        persistSettings({ alwaysOnTop: flag });
+    });
+}
+
+if (voiceOutputToggle) {
+    voiceOutputToggle.addEventListener("change", () => {
+        const flag = voiceOutputToggle.checked;
+        userSettings.voiceOutput = flag;
+        persistSettings({ voiceOutput: flag });
+    });
+}
+
+if (speechRateSlider) {
+    speechRateSlider.addEventListener("input", () => {
+        const rate = parseFloat(speechRateSlider.value);
+        if (speechRateValue) speechRateValue.textContent = `${rate.toFixed(2)}x`;
+        persistSettings({ speechRate: rate });
+    });
+}
+
+if (speechVolumeSlider) {
+    speechVolumeSlider.addEventListener("input", () => {
+        const vol = parseInt(speechVolumeSlider.value, 10);
+        if (speechVolumeValue) speechVolumeValue.textContent = `${vol}%`;
+        persistSettings({ speechVolume: vol });
+    });
+}
+
+if (clearMemoryBtn) {
+    clearMemoryBtn.addEventListener("click", async () => {
+        try {
+            await api?.clearMemory();
+            setBubble("Conversational memory has been cleared.");
+            setStatus("Ready");
+            settingsDrawer.classList.add("hidden");
+        } catch (e) {
+            console.error("Clear memory error:", e);
+        }
+    });
+}
+
+// Bootstrap settings & models
+initializeSettings().then(() => loadInstalledModels());
+
+// ============================================================
+// RESEARCH PROGRESS & VOICE SUBSCRIPTIONS
+// ============================================================
+
+if (api?.onProgress) {
+    api.onProgress(({ step, detail }) => {
+        researchPanel.classList.remove("hidden");
+        researchStepLabel.textContent = (step || "RESEARCH").toUpperCase();
+        researchDetail.textContent = detail || "Investigating...";
+
+        const progressMap = {
+            understanding: "15%",
+            planning: "30%",
+            searching: "50%",
+            reading: "70%",
+            verifying: "85%",
+            synthesizing: "95%",
+            completed: "100%"
+        };
+        progressFill.style.width = progressMap[step] || "50%";
+    });
+}
+
+if (api?.onVoiceEvent) {
+    api.onVoiceEvent((evt) => {
+        console.log("[Voice Event]:", evt);
+
+        if (evt.event === "ready") {
+            setBubble(evt.message || "Phoebe is listening...");
+            setStatus("Ready");
+        } else if (evt.event === "heard") {
+            setBubble(`Heard: "${evt.text}"`);
+            setStatus("Heard");
+            setMood("talking");
+        } else if (evt.event === "state") {
+            if (evt.status === "thinking") {
+                setStatus("Thinking");
+                setMood("sitting");
+                setBubble("Thinking...");
+            } else if (evt.status === "listening") {
+                setStatus("Listening");
+            } else if (evt.status === "speaking") {
+                setStatus("Speaking");
+                setMood("talking");
+            }
+        } else if (evt.event === "response") {
+            setBubble(evt.answer);
+            setMood("talking");
+            lastMarkdownReport = evt.markdown || evt.answer;
+
+            if (evt.sources && evt.sources.length > 0) {
+                renderSources(evt.sources);
+            }
+
+            setTimeout(() => {
+                setMood("sitting");
+                scheduleNextAction();
+            }, 4000);
+        }
+    });
+}
+
+cancelResearchBtn.addEventListener("click", async () => {
+    try {
+        await api?.cancel();
+        researchPanel.classList.add("hidden");
+        setStatus("Cancelled");
+        setBubble("Research was cancelled.");
+    } catch (e) {
+        console.error("Cancel failed:", e);
+    }
+});
+
+closeDrawerBtn.addEventListener("click", () => {
+    sourcesDrawer.classList.add("hidden");
+});
+
+copyAnswerBtn.addEventListener("click", () => {
+    if (lastMarkdownReport) {
+        navigator.clipboard.writeText(lastMarkdownReport);
+        copyAnswerBtn.textContent = "Copied!";
+        setTimeout(() => { copyAnswerBtn.textContent = "Copy"; }, 2000);
+    }
+});
+
+function renderSources(sources) {
+    sourcesList.innerHTML = "";
+    if (!sources || sources.length === 0) {
+        sourcesDrawer.classList.add("hidden");
+        return;
+    }
+
+    sources.forEach((s) => {
+        const li = document.createElement("li");
+        const idx = s.citation_id || "•";
+        const title = s.title || s.url || "Source";
+        const dateStr = s.date ? ` (${s.date})` : "";
+
+        li.innerHTML = `<strong>[${idx}]</strong> <a href="${s.url}" target="_blank">${title}</a>${dateStr}`;
+        sourcesList.appendChild(li);
+    });
+
+    sourcesDrawer.classList.remove("hidden");
 }
 
 async function askBackend(message) {
     const text = message.trim();
+    if (!text) return;
 
-    if (!text) {
-        return;
-    }
-
-    setBubble("Thinking...");
+    setBubble("Investigating...");
     setStatus("Thinking");
     setMood("sitting");
     askInput.disabled = true;
 
     try {
-        const result = await window.bob?.ask(text);
+        let result;
+        const options = {
+            model: userSettings.activeModel,
+            voiceOutput: userSettings.voiceOutput
+        };
+
+        if (currentMode === "research") {
+            researchPanel.classList.remove("hidden");
+            progressFill.style.width = "10%";
+            result = await api?.research(text, options);
+        } else {
+            result = await api?.ask(text, options);
+        }
+
+        researchPanel.classList.add("hidden");
 
         if (!result?.ok) {
-            speakBob(result?.error || "I could not answer that yet.");
+            const err = result?.error || "I could not complete that request, sir.";
+            setBubble(err);
+            setStatus("Ready");
             return;
         }
 
-        speakBob(result.answer);
+        const spoken = result.spoken_answer || result.answer || "Here are the findings, sir.";
+        lastMarkdownReport = result.markdown_report || spoken;
+
+        setBubble(spoken);
+        setMood("talking");
+        setStatus("Ready");
+
+        if (result.sources && result.sources.length > 0) {
+            renderSources(result.sources);
+        }
+
+        setTimeout(() => {
+            setMood("sitting");
+            scheduleNextAction();
+        }, 3500);
+
     } catch (error) {
-        speakBob(`I hit a bridge error: ${error.message}`);
+        researchPanel.classList.add("hidden");
+        setBubble(`Bridge error: ${error.message}`);
+        setStatus("Error");
     } finally {
         askInput.disabled = false;
         askInput.focus();
     }
 }
 
-function speakBob(text) {
-    console.log("Bob:", text);
-    setBubble(text);
-
-    if (!("speechSynthesis" in window)) {
-        setMood("sitting");
-        return;
-    }
-
-    window.speechSynthesis.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.0;
-    utterance.pitch = 1.2;
-    utterance.volume = 1.0;
-
-    utterance.onstart = () => {
-        setMood("talking");
-        setStatus("Speaking");
-    };
-
-    utterance.onend = () => {
-        setMood("sitting");
-        setStatus(shouldListen ? "Listening" : "Paused");
-        scheduleNextAction();
-    };
-
-    window.speechSynthesis.speak(utterance);
-}
-
 bob.addEventListener("click", () => {
     const reply = idleReplies[Math.floor(Math.random() * idleReplies.length)];
-    speakBob(reply);
-});
-
-minimizeBtn.addEventListener("click", () => {
-    window.bob?.minimize();
-});
-
-closeBtn.addEventListener("click", () => {
-    window.bob?.close();
+    setBubble(reply);
 });
 
 askForm.addEventListener("submit", (event) => {
     event.preventDefault();
-
-    const message = askInput.value.trim();
+    const msg = askInput.value.trim();
     askInput.value = "";
-    askBackend(message);
+    askBackend(msg);
 });
 
 setMood("sitting");
-setupRecognition();
+setStatus("Ready");
 scheduleNextAction();

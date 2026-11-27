@@ -2,25 +2,103 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nexon AI</title>
+    <title>Phoebe - Nexon AI</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div id="windowControls" class="window-controls">
+        <span id="modelBadge" class="model-badge" title="Active Ollama Model">qwen3-vl:4b</span>
+        <button id="pinBtn" class="window-button pinned" type="button" title="Always on Top (Toggle)" aria-label="Always on Top">📌</button>
+        <button id="settingsBtn" class="window-button" type="button" title="Settings" aria-label="Settings">⚙</button>
         <button id="minimizeBtn" class="window-button" type="button" title="Minimize" aria-label="Minimize">-</button>
+        <button id="maximizeBtn" class="window-button" type="button" title="Maximize/Restore" aria-label="Maximize">□</button>
         <button id="closeBtn" class="window-button" type="button" title="Close" aria-label="Close">x</button>
     </div>
 
-    <div id="speech" class="speech-bubble" aria-live="polite">Hi, I'm Bob.</div>
+    <!-- Collapsible Settings Drawer -->
+    <div id="settingsDrawer" class="settings-drawer hidden">
+        <div class="drawer-header">
+            <span class="drawer-title">Phoebe Settings</span>
+            <button id="closeSettingsBtn" class="drawer-btn" type="button" title="Close">Close</button>
+        </div>
+        <div class="settings-content">
+            <div class="setting-item">
+                <label for="modelSelect" class="setting-label">Ollama Model:</label>
+                <select id="modelSelect" class="setting-select">
+                    <option value="qwen3-vl:4b">qwen3-vl:4b (Vision)</option>
+                    <option value="qwen3.5:4b">qwen3.5:4b</option>
+                </select>
+            </div>
+            <div class="setting-item toggle-item">
+                <label for="alwaysOnTopToggle" class="setting-label">Always on Top:</label>
+                <input id="alwaysOnTopToggle" type="checkbox" class="setting-checkbox" checked>
+            </div>
+            <div class="setting-item toggle-item">
+                <label for="voiceOutputToggle" class="setting-label">Voice Response:</label>
+                <input id="voiceOutputToggle" type="checkbox" class="setting-checkbox" checked>
+            </div>
+            <div class="setting-item">
+                <div class="setting-label-row">
+                    <label for="speechRateSlider" class="setting-label">Speech Speed:</label>
+                    <span id="speechRateValue" class="setting-val">1.0x</span>
+                </div>
+                <input id="speechRateSlider" type="range" min="0.7" max="1.5" step="0.05" value="1.0" class="setting-range">
+            </div>
+            <div class="setting-item">
+                <div class="setting-label-row">
+                    <label for="speechVolumeSlider" class="setting-label">Voice Volume:</label>
+                    <span id="speechVolumeValue" class="setting-val">100%</span>
+                </div>
+                <input id="speechVolumeSlider" type="range" min="10" max="100" step="5" value="100" class="setting-range">
+            </div>
+            <div class="setting-actions">
+                <button id="clearMemoryBtn" class="danger-btn" type="button">Clear Memory</button>
+            </div>
+        </div>
+    </div>
 
+    <!-- Speech bubble -->
+    <div id="speech" class="speech-bubble" aria-live="polite">Hi, I'm Phoebe. How can I help you today?</div>
+
+    <!-- Mode Selector Pills -->
+    <div class="mode-bar">
+        <button id="modeChat" class="mode-pill active" type="button">Chat</button>
+        <button id="modeSearch" class="mode-pill" type="button">Search</button>
+        <button id="modeResearch" class="mode-pill" type="button">Research</button>
+    </div>
+
+    <!-- Input Form -->
     <form id="askForm" class="ask-form">
-        <input id="askInput" class="ask-input" type="text" autocomplete="off" placeholder="Ask Bob">
-        <button class="ask-button" type="submit" title="Send" aria-label="Send">></button>
+        <input id="askInput" class="ask-input" type="text" autocomplete="off" placeholder="Ask Phoebe or research a topic...">
+        <button id="sendBtn" class="ask-button" type="submit" title="Send" aria-label="Send">></button>
     </form>
 
-    <button id="bob" class="bob sitting" type="button" aria-label="Talk to Bob">
+    <!-- Research Progress Panel (Active during research) -->
+    <div id="researchPanel" class="research-panel hidden">
+        <div class="research-header">
+            <span id="researchStepLabel" class="research-step">Understanding question...</span>
+            <button id="cancelResearchBtn" class="cancel-btn" type="button" title="Stop">Stop</button>
+        </div>
+        <div id="researchDetail" class="research-detail">Initializing deep research engine...</div>
+        <div class="research-progress-bar"><div id="progressFill" class="progress-fill"></div></div>
+    </div>
+
+    <!-- Collapsible Research Details & Sources Panel -->
+    <div id="sourcesDrawer" class="sources-drawer hidden">
+        <div class="drawer-header">
+            <span class="drawer-title">Verified Sources</span>
+            <div class="drawer-actions">
+                <button id="copyAnswerBtn" class="drawer-btn" type="button" title="Copy Answer">Copy</button>
+                <button id="closeDrawerBtn" class="drawer-btn" type="button" title="Close">Close</button>
+            </div>
+        </div>
+        <ul id="sourcesList" class="sources-list"></ul>
+    </div>
+
+    <!-- Phoebe Character Avatar -->
+    <button id="bob" class="bob sitting" type="button" aria-label="Talk to Phoebe">
         <div class="character">
             <div class="head">
                 <div class="hair"></div>
@@ -44,7 +122,7 @@
         </div>
     </button>
 
-    <div id="status" class="status">Starting</div>
+    <div id="status" class="status">Ready</div>
 
     <script src="renderer.js"></script>
 </body>
