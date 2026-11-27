@@ -58,6 +58,14 @@ cache/
 # Generated/sensitive local inventories
 microsoft_voices.txt
 
+# Runtime databases and caches (do not track)
+data/memory.db
+data/research_cache/
+data/*.db
+
+# Audio output
+data/audio/
+
 # IDE/editor files
 .idea/
 .vscode/
