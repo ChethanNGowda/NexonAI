@@ -1,7 +1,7 @@
 {
-  "name": "nexon-ai-frontend",
+  "name": "jarvis-ai-frontend",
   "version": "1.0.0",
-  "description": "Electron desktop companion UI for Nexon AI Bob.",
+  "description": "Electron desktop companion UI for Jarvis AI.",
   "main": "main.js",
   "scripts": {
     "start": "electron .",

@@ -1,10 +1,29 @@
-edge-tts==7.2.8
-elevenlabs==2.64.0
-faster-whisper==1.2.1
-numpy==2.5.2
-ollama==0.6.2
-python-dotenv==1.2.2
-pyttsx3==2.99
-pywin32==312
-sounddevice==0.5.5
-soundfile==0.14.0
+# Core Voice & Audio
+edge-tts>=7.3.1
+faster-whisper>=1.0.0
+sounddevice>=0.5.0
+soundfile>=0.12.0
+pyttsx3>=2.90
+numpy>=1.24.0
+
+# Windows Desktop Automation
+pycaw>=20240000
+pywin32>=306
+psutil>=5.9.0
+pillow>=10.0.0
+
+# AI Engines & Inference
+ollama>=0.4.0
+openai>=1.30.0
+anthropic>=0.30.0
+google-generativeai>=0.8.0
+
+# OpenJarvis Framework
+click>=8.0
+rich>=13.0
+tomlkit>=0.12.0
+croniter>=2.0
+pydantic>=2.0
+httpx>=0.27.0
+websockets>=14.0
+python-dotenv>=1.0.0

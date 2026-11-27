@@ -1,10 +1,19 @@
 {
-  "name": "nexon-ai",
+  "name": "jarvis-ai",
   "version": "1.0.0",
   "private": true,
+  "description": "JARVIS - Desktop AI Voice Assistant (Nexon AI) powered by OpenJarvis",
   "scripts": {
     "start": "npm --prefix frontend start",
+    "app": "npm --prefix frontend start",
+    "voice": "python jarvis.py",
+    "text": "python jarvis.py --text",
+    "cli": "jarvis",
+    "doctor": "jarvis doctor",
+    "serve": "jarvis serve",
+    "gui": "jarvis gui",
+    "companion": "electron frontend/main.js",
     "check": "npm --prefix frontend run check",
-    "test": "npm --prefix frontend test"
+    "test": "python test_all.py"
   }
 }
