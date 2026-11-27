@@ -73,12 +73,14 @@ def _resolve_model(provider: str) -> str:
 
 def _clean_response(content: str) -> str:
     import re
-    if "<think>" in content:
-        if "</think>" in content:
-            content = content.split("</think>")[-1].strip()
-        else:
-            content = re.sub(r"^<think>\s*", "", content).strip()
-    return content
+    if not content:
+        return ""
+    cleaned = re.sub(r"<think>[\s\S]*?</think>", "", content)
+    if "</think>" in cleaned:
+        cleaned = cleaned.split("</think>")[-1]
+    if "<think>" in cleaned:
+        cleaned = re.sub(r"<think>[\s\S]*$", "", cleaned)
+    return cleaned.strip()
 
 
 def _chat_ollama(messages: list, model: str) -> str:

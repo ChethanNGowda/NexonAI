@@ -18,12 +18,20 @@ logger = logging.getLogger(__name__)
 DEFAULT_OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
 PREFERRED_MODELS = ["qwen3-vl:4b", "qwen3.5:4b", "qwen3:8b", "llama3.2:3b", "mistral:latest"]
 PREFERRED_EMBED_MODELS = ["nomic-embed-text:latest", "nomic-embed-text", "all-minilm"]
+EMBED_MODEL_MARKERS = ("embed", "nomic-embed", "all-minilm", "mxbai-embed", "bge-")
+
+
+def is_embedding_model(model_name: str) -> bool:
+    """Return True if the model name corresponds to an embedding-only model."""
+    lower = (model_name or "").strip().lower()
+    return any(marker in lower for marker in EMBED_MODEL_MARKERS)
 
 
 class OllamaClient:
     def __init__(self, host: str = DEFAULT_OLLAMA_HOST):
         self.host = host
         self._cached_models: Optional[List[str]] = None
+        self.last_model_warning: Optional[str] = None
 
     def is_available(self) -> bool:
         """Check if local Ollama daemon is reachable."""
@@ -52,27 +60,62 @@ class OllamaClient:
         models = self.list_installed_models()
         return [m.get("name", "") for m in models if m.get("name")]
 
-    def resolve_chat_model(self, requested_model: Optional[str] = None) -> str:
-        """Resolve the best available local model."""
-        if requested_model:
-            return requested_model
+    def get_chat_model_names(self) -> List[str]:
+        """Return installed model names suitable for chat (excludes embedding models)."""
+        return [m for m in self.get_installed_model_names() if not is_embedding_model(m)]
 
-        env_model = os.getenv("JARVIS_AI_MODEL", "").strip()
-        if env_model:
-            return env_model
+    def get_embedding_model_names(self) -> List[str]:
+        """Return installed embedding model names."""
+        return [m for m in self.get_installed_model_names() if is_embedding_model(m)]
 
-        installed = self.get_installed_model_names()
+    def _select_default_chat_model(self, chat_models: List[str]) -> str:
+        """Select the best default chat model from available chat models."""
         for pref in PREFERRED_MODELS:
-            for name in installed:
+            for name in chat_models:
                 if pref in name:
                     return name
-
-        # Any non-embedding model
-        for name in installed:
-            if "embed" not in name:
-                return name
-
+        if chat_models:
+            return chat_models[0]
         return "qwen3-vl:4b"
+
+    def resolve_chat_model(self, requested_model: Optional[str] = None) -> str:
+        """Resolve the best available local chat model, validating against installed models."""
+        self.last_model_warning = None
+        installed = self.get_installed_model_names()
+        chat_models = [m for m in installed if not is_embedding_model(m)]
+
+        candidate = (requested_model or "").strip() or os.getenv("JARVIS_AI_MODEL", "").strip()
+
+        if candidate:
+            if is_embedding_model(candidate):
+                fallback = self._select_default_chat_model(chat_models)
+                self.last_model_warning = (
+                    f"Model '{candidate}' is an embedding model and cannot be used for chat; "
+                    f"falling back to '{fallback}'."
+                )
+                logger.warning(self.last_model_warning)
+                return fallback
+
+            if installed:
+                # Exact match first
+                if candidate in chat_models:
+                    return candidate
+                # Tagless/prefix match (e.g. 'qwen3.5' -> 'qwen3.5:4b')
+                for name in chat_models:
+                    if name.split(":")[0] == candidate:
+                        return name
+                fallback = self._select_default_chat_model(chat_models)
+                self.last_model_warning = (
+                    f"Requested model '{candidate}' is not installed in Ollama; "
+                    f"falling back to '{fallback}'."
+                )
+                logger.warning(self.last_model_warning)
+                return fallback
+
+            # Ollama unreachable or no models returned; pass candidate through
+            return candidate
+
+        return self._select_default_chat_model(chat_models)
 
     def resolve_embed_model(self) -> Optional[str]:
         """Resolve available local embedding model (e.g. nomic-embed-text)."""
@@ -123,23 +166,48 @@ class OllamaClient:
 
             if stream_callback is not None:
                 accumulated = []
+                in_think_block = False
                 with urllib.request.urlopen(req, timeout=120) as resp:
                     for line in resp:
                         if not line:
                             continue
-                        chunk = json.loads(line.decode("utf-8"))
-                        piece = chunk.get("message", {}).get("content", "")
-                        if piece:
-                            accumulated.append(piece)
+                        try:
+                            chunk = json.loads(line.decode("utf-8"))
+                        except Exception:
+                            continue
+                        if not isinstance(chunk, dict):
+                            continue
+                        msg = chunk.get("message") or {}
+                        piece = msg.get("content", "") if isinstance(msg, dict) else ""
+                        if not piece:
+                            continue
+                        accumulated.append(piece)
+                        if "<think>" in piece:
+                            in_think_block = True
+                        if "</think>" in piece:
+                            in_think_block = False
+                            after = piece.split("</think>")[-1]
+                            if after:
+                                stream_callback(after)
+                            continue
+                        if not in_think_block:
                             stream_callback(piece)
-                full_text = "".join(accumulated).strip()
-                return self._clean_thinking(full_text)
+                full_text = self._clean_thinking("".join(accumulated).strip())
+                return full_text or "I didn't receive a valid response from the model."
             else:
                 with urllib.request.urlopen(req, timeout=120) as resp:
                     chunk = json.loads(resp.read().decode("utf-8"))
-                    msg = chunk.get("message", {})
-                    content = msg.get("content", "").strip() or msg.get("thinking", "").strip()
-                    return self._clean_thinking(content)
+                    if not isinstance(chunk, dict):
+                        return "I received a malformed response from the model."
+                    msg = chunk.get("message") or {}
+                    if not isinstance(msg, dict):
+                        return "I received a malformed response from the model."
+                    raw_content = (msg.get("content") or "").strip()
+                    raw_thinking = (msg.get("thinking") or "").strip()
+                    cleaned = self._clean_thinking(raw_content)
+                    if not cleaned and raw_thinking:
+                        cleaned = self._clean_thinking(raw_thinking)
+                    return cleaned or "I didn't receive a valid response from the model."
 
         except urllib.error.URLError as e:
             return f"Ollama connection error: {e}. Ensure Ollama is running on {self.host}."
@@ -216,7 +284,7 @@ class OllamaClient:
                 headers={"Content-Type": "application/json"},
                 method="POST",
             )
-            with urllib.request.urlopen(req, timeout=10) as resp:
+            with urllib.request.urlopen(req, timeout=25) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 return data.get("embedding")
         except Exception as e:
@@ -224,13 +292,18 @@ class OllamaClient:
             return None
 
     def _clean_thinking(self, content: str) -> str:
-        """Strip internal thinking tags if present."""
-        if "<think>" in content:
-            if "</think>" in content:
-                content = content.split("</think>")[-1].strip()
-            else:
-                content = re.sub(r"^<think>\s*", "", content).strip()
-        return content
+        """Strip internal thinking tags (including closed, unclosed, or stray closing tags)."""
+        if not content:
+            return ""
+        # Remove complete <think>...</think> blocks
+        cleaned = re.sub(r"<think>[\s\S]*?</think>", "", content)
+        # If a stray </think> remains (e.g. from prefill echo), keep only text after the last one
+        if "</think>" in cleaned:
+            cleaned = cleaned.split("</think>")[-1]
+        # If an unclosed <think> remains (truncated generation), strip from <think> to end
+        if "<think>" in cleaned:
+            cleaned = re.sub(r"<think>[\s\S]*$", "", cleaned)
+        return cleaned.strip()
 
 
 # Global instance
