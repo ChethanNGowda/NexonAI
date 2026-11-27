@@ -189,6 +189,7 @@ class AutomationGuard:
     ):
         self._log_path = log_path
         self._estop_path = estop_path
+        self._pending_path = (estop_path.parent / ".pending_confirmations.json") if estop_path else None
         self.default_ttl_seconds = default_ttl_seconds
 
         self._lock = threading.Lock()
@@ -213,6 +214,79 @@ class AutomationGuard:
             return self._estop_path
         env_estop = os.getenv("NEXON_EMERGENCY_STOP_FILE", "").strip()
         return Path(env_estop) if env_estop else _DEFAULT_ESTOP_PATH
+
+    def _resolve_pending_path(self) -> Path:
+        if self._pending_path is not None:
+            return self._pending_path
+        return self._resolve_estop_path().parent / ".pending_confirmations.json"
+
+    def _save_pending_store(self) -> None:
+        """Persist non-used pending confirmations for cross-process CLI/Electron confirm/deny."""
+        path = self._resolve_pending_path()
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            now_wall = time.time()
+            now_mono = time.monotonic()
+            data = {
+                "latest": self._latest_pending_id,
+                "items": {
+                    cid: {
+                        "confirmation_id": p.confirmation_id,
+                        "action": p.action,
+                        "target": p.target,
+                        "description": p.description,
+                        "wall_expires_at": now_wall + max(0.0, p.expires_at - now_mono),
+                        "used": p.used,
+                    }
+                    for cid, p in self._pending.items()
+                    if not p.used
+                },
+            }
+            path.write_text(json.dumps(data), encoding="utf-8")
+        except Exception:
+            pass
+
+    def _load_pending_from_store(self, confirmation_id: Optional[str] = None) -> Optional[PendingConfirmation]:
+        """Load a pending confirmation from disk if created in another process."""
+        path = self._resolve_pending_path()
+        if not path.exists():
+            return None
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            items = data.get("items") or {}
+            cid = confirmation_id or data.get("latest")
+            if not cid or cid not in items:
+                return None
+            rec = items[cid]
+            now_wall = time.time()
+            now_mono = time.monotonic()
+            rem = float(rec.get("wall_expires_at", 0.0)) - now_wall
+            return PendingConfirmation(
+                confirmation_id=rec["confirmation_id"],
+                action=rec["action"],
+                target=rec["target"],
+                description=rec.get("description", ""),
+                callback=self._default_callback_for(rec["action"], rec["target"]),
+                created_at=now_mono,
+                expires_at=now_mono + rem,
+                used=bool(rec.get("used", False)),
+            )
+        except Exception:
+            return None
+
+    @staticmethod
+    def _default_callback_for(action: str, target: str) -> Optional[Callable[[], Tuple[bool, str]]]:
+        """Resolve built-in executor for cross-process confirmed destructive actions."""
+        if action == "close_app":
+            from backend.automation.system_control import close_app
+            return lambda: close_app(target, confirmed=True)
+        if action in {"lock_pc", "lock_workstation"}:
+            from backend.automation.system_control import lock_workstation
+            return lambda: lock_workstation(confirmed=True)
+        if action in {"execute_command", "run_command"}:
+            from backend.automation.system_control import _run_approved_argv
+            return lambda: _run_approved_argv(shlex.split(target, posix=False))
+        return None
 
     # ------------------------------------------------------------------
     # Secret Redaction
