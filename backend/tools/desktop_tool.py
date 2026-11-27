@@ -11,17 +11,23 @@ Registered tools providing full Windows PC control:
 
 from typing import Any, Dict, List
 from backend.ai.tool_registry import global_registry
+from backend.automation.guard import (
+    get_automation_guard,
+    reset_emergency_stop,
+    trigger_emergency_stop,
+)
 from backend.automation.system_control import (
-    close_app,
+    close_app_guarded,
     control_media,
     control_volume,
+    execute_approved_command_guarded,
     get_all_disks,
     get_clipboard_text,
     get_comprehensive_diagnostics,
     get_gpu_stats,
     get_recent_files,
     list_running_apps,
-    lock_workstation,
+    lock_workstation_guarded,
     minimize_all_windows,
     open_app,
     open_latest_file,
@@ -60,8 +66,14 @@ def tool_launch_app(app_name: str) -> Dict[str, Any]:
     },
 )
 def tool_close_app(app_name: str) -> Dict[str, Any]:
-    ok, msg = close_app(app_name)
-    return {"success": ok, "message": msg}
+    decision = close_app_guarded(app_name)
+    return {
+        "success": decision.allowed,
+        "status": decision.status,
+        "requires_confirmation": decision.status == "pending_confirm",
+        "confirmation_id": decision.confirmation_id,
+        "message": decision.message,
+    }
 
 
 @global_registry.register(
@@ -125,8 +137,14 @@ def tool_open_latest() -> Dict[str, Any]:
     parameters={"type": "object", "properties": {}},
 )
 def tool_lock() -> Dict[str, Any]:
-    ok, msg = lock_workstation()
-    return {"success": ok, "message": msg}
+    decision = lock_workstation_guarded()
+    return {
+        "success": decision.allowed,
+        "status": decision.status,
+        "requires_confirmation": decision.status == "pending_confirm",
+        "confirmation_id": decision.confirmation_id,
+        "message": decision.message,
+    }
 
 
 @global_registry.register(
@@ -225,3 +243,91 @@ def tool_media(action: str) -> Dict[str, Any]:
 def tool_screenshot() -> Dict[str, Any]:
     ok, msg = take_screenshot()
     return {"success": ok, "message": msg}
+
+
+@global_registry.register(
+    name="desktop_run_approved_command",
+    description="Request confirmation to execute an allowlisted non-destructive diagnostic command.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "command": {"type": "string", "description": "Allowlisted command to validate and queue for confirmation."},
+        },
+        "required": ["command"],
+    },
+)
+def tool_run_approved_command(command: str) -> Dict[str, Any]:
+    decision = execute_approved_command_guarded(command)
+    return {
+        "success": decision.allowed,
+        "status": decision.status,
+        "requires_confirmation": decision.status == "pending_confirm",
+        "confirmation_id": decision.confirmation_id,
+        "message": decision.message,
+    }
+
+
+@global_registry.register(
+    name="desktop_confirm_action",
+    description="Confirm a pending destructive desktop automation action by its confirmation ID.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "confirmation_id": {"type": "string", "description": "Single-use confirmation ID."},
+        },
+        "required": ["confirmation_id"],
+    },
+)
+def tool_confirm_action(confirmation_id: str) -> Dict[str, Any]:
+    decision = get_automation_guard().confirm_action(confirmation_id=confirmation_id)
+    return {
+        "success": decision.allowed,
+        "status": decision.status,
+        "confirmation_id": decision.confirmation_id,
+        "message": decision.message,
+    }
+
+
+@global_registry.register(
+    name="desktop_deny_action",
+    description="Deny and cancel a pending desktop automation action by its confirmation ID.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "confirmation_id": {"type": "string", "description": "Single-use confirmation ID."},
+        },
+        "required": ["confirmation_id"],
+    },
+)
+def tool_deny_action(confirmation_id: str) -> Dict[str, Any]:
+    decision = get_automation_guard().deny_action(confirmation_id=confirmation_id)
+    return {
+        "success": decision.allowed,
+        "status": decision.status,
+        "confirmation_id": decision.confirmation_id,
+        "message": decision.message,
+    }
+
+
+@global_registry.register(
+    name="desktop_emergency_stop",
+    description="Immediately halt all desktop automation and invalidate pending confirmations.",
+    parameters={"type": "object", "properties": {}},
+)
+def tool_emergency_stop() -> Dict[str, Any]:
+    return trigger_emergency_stop("Triggered via desktop_emergency_stop tool")
+
+
+@global_registry.register(
+    name="desktop_reset_emergency_stop",
+    description="Explicitly reset the automation emergency stop.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "authorized": {"type": "boolean", "description": "Must be true to authorize reset."},
+        },
+        "required": ["authorized"],
+    },
+)
+def tool_reset_emergency_stop(authorized: bool = False) -> Dict[str, Any]:
+    return reset_emergency_stop(authorized=authorized)

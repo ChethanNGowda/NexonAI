@@ -335,10 +335,17 @@ def _find_app_path(name: str) -> Optional[str]:
 
 
 def open_app(app_name: str) -> Tuple[bool, str]:
-    """Launch any application on the user's PC."""
+    """Launch an approved application on the user's PC."""
+    from backend.automation.guard import get_automation_guard
+
     clean_name = re.sub(r"[^\w\s-]", "", app_name).lower().strip()
     if not clean_name:
         return False, "No application name specified, sir."
+
+    guard = get_automation_guard()
+    decision = guard.authorize_safe_action("open_app", clean_name)
+    if not decision.allowed:
+        return False, decision.message
 
     # 0. Check installed Steam games first (e.g. CS2, RDR2, Forza, Spider-Man)
     steam_games = get_installed_steam_games()
@@ -396,12 +403,28 @@ def open_app(app_name: str) -> Tuple[bool, str]:
     return False, f"Could not find application '{clean_name}' on your system, sir."
 
 
-def close_app(app_name: str) -> Tuple[bool, str]:
-    """Close or terminate an active application by name."""
+def close_app_guarded(app_name: str):
+    """Request confirmation before closing/terminating an application."""
+    from backend.automation.guard import get_automation_guard, GuardDecision
+
     clean = re.sub(r"[^\w\s-]", "", app_name).lower().strip()
     if not clean:
-        return False, "No application specified to close, sir."
+        return GuardDecision(
+            allowed=False, status="blocked", action="close_app", target="",
+            message="No application specified to close, sir.",
+        )
 
+    guard = get_automation_guard()
+    return guard.request_confirmation(
+        action="close_app",
+        target=clean,
+        description=f"Close running application '{clean}'",
+        callback=lambda: _execute_close_app(clean),
+    )
+
+
+def _execute_close_app(clean: str) -> Tuple[bool, str]:
+    """Internal process termination executed only after explicit confirmation."""
     target_procs = []
     for proc in psutil.process_iter(["pid", "name"]):
         try:
@@ -427,6 +450,18 @@ def close_app(app_name: str) -> Tuple[bool, str]:
                 pass
 
     return True, f"Closed {count} process(es) for '{clean}', sir."
+
+
+def close_app(app_name: str, confirmed: bool = False) -> Tuple[bool, str]:
+    """Close or terminate an active application by name (requires confirmation)."""
+    if confirmed:
+        clean = re.sub(r"[^\w\s-]", "", app_name).lower().strip()
+        if not clean:
+            return False, "No application specified to close, sir."
+        return _execute_close_app(clean)
+
+    decision = close_app_guarded(app_name)
+    return decision.allowed, decision.message
 
 
 def list_running_apps(limit: int = 15) -> List[Dict[str, Any]]:
@@ -538,13 +573,33 @@ def open_latest_file(folder_name: str = "downloads") -> Tuple[bool, str]:
 # SYSTEM POWER & WORKSPACE CONTROLS
 # ============================================================
 
-def lock_workstation() -> Tuple[bool, str]:
-    """Lock the Windows workstation immediately."""
+def _execute_lock_workstation() -> Tuple[bool, str]:
     try:
         ctypes.windll.user32.LockWorkStation()
         return True, "Workstation locked, sir."
     except Exception as e:
         return False, f"Could not lock screen: {e}"
+
+
+def lock_workstation_guarded():
+    """Request confirmation before locking the Windows workstation."""
+    from backend.automation.guard import get_automation_guard
+
+    guard = get_automation_guard()
+    return guard.request_confirmation(
+        action="lock_pc",
+        target="workstation",
+        description="Lock the Windows workstation",
+        callback=_execute_lock_workstation,
+    )
+
+
+def lock_workstation(confirmed: bool = False) -> Tuple[bool, str]:
+    """Lock the Windows workstation (requires confirmation)."""
+    if confirmed:
+        return _execute_lock_workstation()
+    decision = lock_workstation_guarded()
+    return decision.allowed, decision.message
 
 
 def minimize_all_windows() -> Tuple[bool, str]:
@@ -765,7 +820,12 @@ def format_stats_speech(stats: dict) -> str:
 
 
 def control_volume(action: str) -> tuple[bool, str]:
+    from backend.automation.guard import get_automation_guard
+
     action = action.lower().strip()
+    decision = get_automation_guard().authorize_safe_action("control_volume", action)
+    if not decision.allowed:
+        return False, decision.message
     if "up" in action or "increase" in action or "raise" in action:
         _press_key(VK_VOLUME_UP, times=5)
         return True, "Volume increased, sir."
@@ -779,7 +839,12 @@ def control_volume(action: str) -> tuple[bool, str]:
 
 
 def control_media(action: str) -> tuple[bool, str]:
+    from backend.automation.guard import get_automation_guard
+
     action = action.lower().strip()
+    decision = get_automation_guard().authorize_safe_action("control_media", action)
+    if not decision.allowed:
+        return False, decision.message
     if "play" in action or "pause" in action or "resume" in action:
         _press_key(VK_MEDIA_PLAY_PAUSE, times=1)
         return True, "Media toggled, sir."
@@ -799,24 +864,97 @@ def search_web(query: str) -> tuple[bool, str]:
     if not query.strip():
         return False, "Search query was empty, sir."
     url = f"https://www.google.com/search?q={urllib.parse.quote(query.strip())}"
-    webbrowser.open(url)
-    return True, f"Searching Google for '{query}', sir."
+    return open_url(url)
 
 
 def search_youtube(query: str) -> tuple[bool, str]:
     if not query.strip():
         return False, "YouTube query was empty, sir."
     url = f"https://www.youtube.com/results?search_query={urllib.parse.quote(query.strip())}"
-    webbrowser.open(url)
-    return True, f"Searching YouTube for '{query}', sir."
+    return open_url(url)
 
 
 def open_url(url: str) -> tuple[bool, str]:
-    target = url.strip()
-    if not target.startswith("http://") and not target.startswith("https://"):
-        target = f"https://{target}"
-    webbrowser.open(target)
-    return True, f"Navigating to {url}, sir."
+    from backend.automation.guard import get_automation_guard
+
+    guard = get_automation_guard()
+    ok, normalized, err = guard.validate_url(url)
+    if not ok:
+        guard.log_action("open_url", url, "blocked", detail=err)
+        return False, f"Blocked unsafe URL: {err}"
+
+    decision = guard.authorize_safe_action("open_url", normalized)
+    if not decision.allowed:
+        return False, decision.message
+
+    webbrowser.open(normalized)
+    return True, f"Navigating to {normalized}, sir."
+
+
+def _run_approved_argv(argv: List[str]) -> Tuple[bool, str]:
+    """Execute a pre-validated argv list without shell=True, cancellable via emergency stop."""
+    import subprocess as _sp
+    import uuid
+    from backend.automation.guard import get_automation_guard
+
+    guard = get_automation_guard()
+    task_id = f"cmd_{uuid.uuid4().hex[:8]}"
+    proc_holder: Dict[str, Any] = {"proc": None}
+
+    def _cancel():
+        p = proc_holder.get("proc")
+        if p and p.poll() is None:
+            try:
+                p.terminate()
+            except Exception:
+                pass
+
+    task = guard.register_cancellable_task(task_id, cancel_fn=_cancel)
+    try:
+        if task.cancel_event.is_set():
+            return False, "Command cancelled by emergency stop."
+        proc = _sp.Popen(argv, shell=False, stdout=_sp.PIPE, stderr=_sp.PIPE, text=True)
+        proc_holder["proc"] = proc
+        try:
+            stdout, stderr = proc.communicate(timeout=15)
+        except _sp.TimeoutExpired:
+            proc.terminate()
+            return False, "Approved command timed out after 15s."
+
+        if task.cancel_event.is_set():
+            return False, "Command cancelled by emergency stop."
+        if proc.returncode != 0:
+            err_text = guard.redact_secrets((stderr or stdout or "").strip())
+            return False, f"Command exited with code {proc.returncode}: {err_text[:200]}"
+        out_text = guard.redact_secrets((stdout or "").strip())
+        return True, out_text[:500] or "Command completed."
+    finally:
+        guard.unregister_cancellable_task(task_id)
+
+
+def execute_approved_command_guarded(command: str | List[str]):
+    """Validate an approved command and request explicit confirmation before running."""
+    from backend.automation.guard import get_automation_guard, GuardDecision
+
+    guard = get_automation_guard()
+    ok, argv, err = guard.validate_command(command)
+    if not ok:
+        guard.log_action("execute_command", str(command), "blocked", detail=err)
+        return GuardDecision(
+            allowed=False,
+            status="blocked",
+            action="execute_command",
+            target=guard.redact_secrets(str(command)),
+            message=f"Command blocked: {guard.redact_secrets(err)}",
+        )
+
+    cmd_display = " ".join(argv)
+    return guard.request_confirmation(
+        action="execute_command",
+        target=cmd_display,
+        description=f"Execute approved command '{cmd_display}'",
+        callback=lambda: _run_approved_argv(argv),
+    )
 
 
 def take_screenshot() -> tuple[bool, str]:
