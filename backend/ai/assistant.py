@@ -34,6 +34,7 @@ from backend.ai.ollama_client import get_ollama_client
 from backend.ai.prompts import get_system_prompt
 from backend.core.assistant import handle_fast_intent
 from backend.memory.memory_manager import get_memory_manager
+from backend.memory.retrieval import get_retrieval_engine
 from backend.research.research_agent import get_research_agent
 from backend.voice.tts import speak, set_speech_rate, set_speech_volume, set_voice_id
 
@@ -44,7 +45,42 @@ class CentralAssistant:
     def __init__(self):
         self.ollama = get_ollama_client()
         self.memory = get_memory_manager()
+        self.retrieval = get_retrieval_engine()
         self.research_agent = get_research_agent()
+
+    def _build_retrieved_context(self, query: str, recent_history: list) -> str:
+        """Retrieve relevant older turns and research summaries without duplicating recent history."""
+        recent_contents = {m.get("content", "").strip().lower() for m in recent_history}
+        candidates = []
+
+        for msg in self.memory.get_older_history(offset=6, limit=20):
+            text = (msg.get("content") or "").strip()
+            if text and text.lower() not in recent_contents and text.lower() != query.lower():
+                role_label = "User" if msg.get("role") == "user" else "Phoebe"
+                candidates.append(f"[Past Chat - {role_label}] {text[:240]}")
+
+        for rep in self.memory.get_recent_research(limit=5):
+            q = (rep.get("query") or "").strip()
+            summary = (rep.get("spoken_summary") or "").strip()
+            if q and summary:
+                candidates.append(f"[Past Research: {q}] {summary[:280]}")
+
+        if not candidates:
+            return ""
+
+        matches = self.retrieval.find_relevant_context(query, candidates, top_k=2)
+        if not matches:
+            return ""
+
+        lines = []
+        total_chars = 0
+        for item in matches:
+            snippet = item["text"]
+            if total_chars + len(snippet) > 800:
+                break
+            lines.append(f"- {snippet}")
+            total_chars += len(snippet)
+        return "\n".join(lines)
 
     def process(
         self,
@@ -130,8 +166,17 @@ class CentralAssistant:
         # 3. Conversational AI Chat via Local Ollama
         system_instruction = get_system_prompt()
         history = self.memory.get_recent_history(limit=6)
+        retrieved_context = self._build_retrieved_context(clean_text, history)
 
         messages = [{"role": "system", "content": system_instruction}]
+        if retrieved_context:
+            messages.append({
+                "role": "system",
+                "content": (
+                    "[RETRIEVED MEMORY CONTEXT - Background reference only, separate from system instructions]\n"
+                    f"{retrieved_context}"
+                ),
+            })
         messages.extend(history)
         messages.append({"role": "user", "content": clean_text})
 
@@ -141,15 +186,20 @@ class CentralAssistant:
             temperature=0.5,
             max_tokens=250,
         )
+        model_warning = getattr(self.ollama, "last_model_warning", None)
+        if model_warning:
+            print(f"[MODEL WARNING] {model_warning}", file=sys.stderr)
 
         audio_path = ""
         if play_speech and answer:
             audio_path = speak(answer, play_audio=True)
 
-        self.memory.save_message("user", clean_text, action_type="chat")
-        self.memory.save_message("assistant", answer, action_type="chat")
+        is_error_reply = answer.startswith("Ollama connection error:") or answer.startswith("Ollama error:")
+        if not is_error_reply and answer.strip():
+            self.memory.save_message("user", clean_text, action_type="chat")
+            self.memory.save_message("assistant", answer, action_type="chat")
 
-        return {
+        result = {
             "ok": True,
             "action": "chat",
             "query": clean_text,
@@ -159,6 +209,9 @@ class CentralAssistant:
             "audio_path": audio_path,
             "is_exit": False,
         }
+        if model_warning:
+            result["model_warning"] = model_warning
+        return result
 
 
 _central_assistant: Optional[CentralAssistant] = None
@@ -198,8 +251,13 @@ def main():
     assistant = get_assistant()
 
     if args.models:
-        models = assistant.ollama.get_installed_model_names()
-        print(json.dumps({"ok": True, "installed_models": models}))
+        chat_models = assistant.ollama.get_chat_model_names()
+        embed_models = assistant.ollama.get_embedding_model_names()
+        print(json.dumps({
+            "ok": True,
+            "installed_models": chat_models,
+            "embedding_models": embed_models,
+        }))
         return 0
 
     if args.clear_memory:
