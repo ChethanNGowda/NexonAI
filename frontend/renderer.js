@@ -231,7 +231,11 @@ async function initializeSettings() {
 async function loadInstalledModels() {
     try {
         const res = await api?.getModels();
-        const models = res?.installed_models || [];
+        const rawModels = res?.installed_models || [];
+        const models = rawModels.filter((m) => {
+            const lower = String(m || "").toLowerCase();
+            return lower && !lower.includes("embed") && !lower.includes("all-minilm");
+        });
 
         if (modelSelect) {
             modelSelect.innerHTML = "";
@@ -249,11 +253,12 @@ async function loadInstalledModels() {
                 });
             }
 
-            if (userSettings.activeModel) {
+            if (userSettings.activeModel && (models.length === 0 || models.includes(userSettings.activeModel))) {
                 modelSelect.value = userSettings.activeModel;
             } else if (models.length > 0) {
                 userSettings.activeModel = models[0];
                 modelSelect.value = models[0];
+                persistSettings({ activeModel: models[0] });
             }
             if (modelBadge) modelBadge.textContent = userSettings.activeModel;
         }
