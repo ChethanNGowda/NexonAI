@@ -295,7 +295,7 @@ def run_voice_loop_ipc(always_listen: bool = False, silent_greeting: bool = Fals
     - Crashes inside the loop are caught and reported; the loop continues.
     - Responds to {"cmd": "shutdown"} from Electron for clean exit.
     """
-    _ensure_mic_unmuted()
+    # Note: skip pycaw COM manipulation in --ipc mode to avoid STA/MTA conflict with PortAudio (sounddevice)
 
     # Import lazily so errors don't prevent the process from starting
     try:
@@ -418,6 +418,7 @@ def run_voice_loop_ipc(always_listen: bool = False, silent_greeting: bool = Fals
             _emit({"event": "response", "answer": ack, "action": "wake_ack",
                    "markdown": ack, "sources": []})
             if voice_enabled:
+                _emit({"event": "state", "status": "speaking"})
                 try:
                     speak(ack, play_audio=True)
                 except Exception:
@@ -431,7 +432,7 @@ def run_voice_loop_ipc(always_listen: bool = False, silent_greeting: bool = Fals
             assistant = get_assistant()
             res = assistant.process(
                 prompt,
-                play_speech=voice_enabled,
+                play_speech=False,
                 model_override=current_model,
             )
             answer = (res.get("spoken_answer") or res.get("markdown_report")
@@ -443,7 +444,13 @@ def run_voice_loop_ipc(always_listen: bool = False, silent_greeting: bool = Fals
                 "markdown": res.get("markdown_report", answer),
                 "sources": res.get("sources", []),
             })
-            _emit({"event": "state", "status": "listening"})
+            if voice_enabled and answer:
+                _emit({"event": "state", "status": "speaking"})
+                try:
+                    speak(answer, play_audio=True)
+                except Exception:
+                    pass
+            _emit({"event": "state", "status": "listening" if listening_enabled else "idle"})
 
             if res.get("is_exit"):
                 _emit({"event": "exit"})
