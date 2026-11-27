@@ -48,15 +48,36 @@ NexonAI (Phoebe / Jarvis) is a local, privacy-first Windows desktop AI assistant
    - Zero-cost high-fidelity neural voice synthesis (`en-GB-RyanNeural`).
    - Two-tier output: concise spoken summaries (1-2 sentences) aloud, with detailed research and citations presented in the desktop UI.
 
-8. **Windows Desktop Automation & OpenJarvis Tools**:
-   - Instant zero-latency actions (<10ms) for app launching (Chrome, Steam, Spotify, VS Code, etc.), volume control, media playback, system stats, and screenshots.
-   - Registered as native tools in OpenJarvis.
+8. **Safe Desktop Automation Framework** (Phase 6):
+   - Centralized `AutomationGuard` classifies every action as safe or destructive.
+   - Safe actions (time, volume, stats, open apps/URLs) execute instantly.
+   - Destructive actions (close processes, overwrite/delete files, run commands, lock PC) require expiring single-use confirmation tokens.
+   - Emergency stop (persisted to `logs/.emergency_stop`) halts all automation and survives process restarts.
+   - Structured audit log at `logs/actions.log` — credentials and secrets automatically redacted.
+   - Application and URL allowlisting; arbitrary shell commands blocked.
 
-9. **Interactive Electron Desktop Companion**:
-   - Floating widget with Phoebe avatar, animated mood states, and speech bubbles.
-   - Mode selector (`Chat`, `Search`, `Research`).
-   - Live research progress card with cancel button.
-   - Collapsible verified sources drawer with clickable links and copy-to-clipboard button.
+9. **Local Vision Module** (Phase 7):
+   - Image analysis via local `qwen3-vl:4b` vision model — no cloud upload required.
+   - Permissioned screenshot capture logged through `AutomationGuard`.
+   - Approved-folder file search restricted to home directory and workspace root.
+   - Document reading: TXT, MD, PY, JSON, CSV, PDF (via `pypdf`).
+   - Document summarization via local Ollama (falls back to excerpt if Ollama unavailable).
+   - Safe file creation and deletion: overwrites and deletes route through guard confirmation.
+
+10. **Security & Error Handling** (Phase 8):
+    - IPC input validation in Electron: null-byte stripping, length caps, model/voice/confirmation-id format enforcement.
+    - `webSecurity: true` enforced in `BrowserWindow`.
+    - Safe error sanitization: API keys, Bearer tokens, and env-var values redacted from all stdout error responses.
+    - Content-Security-Policy meta tag in `index.html`.
+    - `.gitignore` verified for `.env`, logs, database, and dependency directories.
+
+11. **Interactive Electron Desktop Companion**:
+    - Floating widget with Phoebe avatar, animated mood states, and speech bubbles.
+    - Mode selector (`Chat`, `Search`, `Research`).
+    - Live research progress card with cancel button.
+    - Collapsible verified sources drawer with clickable links and copy-to-clipboard button.
+    - Emergency-stop button with IPC-backed guard integration.
+    - Model selector (chat models only — embedding models excluded).
 
 ---
 
@@ -81,15 +102,17 @@ NexonAI/
 │   ├── tools/
 │   │   ├── web_search.py           # Web search tool
 │   │   ├── web_reader.py           # Webpage reading tool
-│   │   ├── file_search.py          # Local file search tool
-│   │   ├── document_reader.py      # PDF, text, and code document reader tool
-│   │   └── desktop_tool.py         # Windows automation tools
+│   │   ├── file_search.py          # Approved-folder file search, document reader, safe create/delete (Phase 7)
+│   │   └── desktop_tool.py         # Windows automation tools (guard-integrated)
 │   ├── memory/
 │   │   ├── memory_manager.py       # SQLite persistent memory (data/memory.db)
 │   │   ├── embeddings.py           # Local vector embeddings (nomic-embed-text)
 │   │   └── retrieval.py            # Hybrid semantic & keyword context retrieval
 │   ├── automation/
+│   │   ├── guard.py                # Centralized AutomationGuard (Phase 6)
 │   │   └── system_control.py       # Windows OS automation (apps, volume, media, stats)
+│   ├── vision/
+│   │   └── __init__.py             # Local qwen3-vl:4b vision + permissioned screenshot (Phase 7)
 │   ├── voice/
 │   │   ├── stt.py                  # Google Voice-grade streaming VAD + Whisper
 │   │   └── tts.py                  # Microsoft Edge TTS neural speech
@@ -149,29 +172,27 @@ BRAVE_API_KEY=
 TAVILY_API_KEY=
 ```
 
-### 3. Run All 11 Diagnostics
+### 3. Run the Nine-Phase Test Suite
 
-Ensure all hardware, speech models, local Ollama, web search, scraper, and database are functional:
+Run the full automated test suite for all nine development phases:
+
 ```powershell
-python test_all.py
+# Phase-by-phase (all phases must pass before continuing)
+.venv\Scripts\python.exe tests\test_phase2_electron.py    # Electron completion (7 tests)
+.venv\Scripts\python.exe tests\test_phase3_runtime.py     # Python IPC runtime (16 tests)
+.venv\Scripts\python.exe tests\test_phase4_voice.py       # Voice pipeline (11 tests)
+.venv\Scripts\python.exe tests\test_phase5_memory.py      # Ollama + memory (12 tests)
+.venv\Scripts\python.exe tests\test_phase6_automation.py  # Automation guard (20 tests)
+.venv\Scripts\python.exe tests\test_phase7_vision.py      # Vision + file ops (22 tests)
+.venv\Scripts\python.exe tests\test_phase8_security.py    # Security hardening (8 tests)
+.venv\Scripts\python.exe tests\test_phase9_windows.py     # Windows 11 verification (41 tests)
 ```
 
-Expected output:
-```
-[1/7] Testing System Automation...                   [OK]
-[2/7] Testing OpenJarvis Registered Desktop Tools... [OK]
-[3/7] Testing OpenJarvis Edge-TTS Speech Synthesis...[OK]
-[4/7] Testing Whisper Speech-to-Text Model...        [OK]
-[5/7] Testing Fast Intent Router & Assistant...      [OK]
-[6/7] Checking AI Intelligence Connectivity...       [OK] (Ollama: qwen3-vl:4b)
-[7/7] Checking Audio Devices...                      [OK]
-[8/11] Testing Multi-Engine Internet Search...       [OK]
-[9/11] Testing Website Content Extractor...          [OK]
-[10/11] Testing Persistent SQLite Memory...          [OK]
-[11/11] Testing Unified Assistant Brain...           [OK]
-=================================================================
-              ALL 11 DIAGNOSTICS COMPLETE
-=================================================================
+Expected total: **137 tests, all passing**.
+
+```powershell
+# Legacy diagnostic suite (original test_all.py)
+python test_all.py
 ```
 
 ---
