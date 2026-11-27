@@ -104,6 +104,8 @@ let _daemonLineBuffer = "";        // Rolling stdout line buffer
 let _daemonReady      = false;     // True once {"event":"ready"} received
 let _daemonRestarts   = 0;         // Restart counter (rate-limit safety)
 let _daemonRestartTimer = null;    // Pending restart timer handle
+let _isQuitting       = false;     // True when app is shutting down
+let _intentionalStop  = false;     // True during intentional daemon restart
 const MAX_RESTARTS    = 5;         // Max automatic restarts before giving up
 const RESTART_DELAY   = 3000;      // ms between restart attempts
 
@@ -154,6 +156,7 @@ function _startDaemon(settings) {
 
     _daemonLineBuffer = "";
     _daemonReady      = false;
+    _intentionalStop  = false;
 
     // ── stdout: JSON IPC events ──────────────────────────────────────────────
     _daemon.stdout.on("data", (chunk) => {
@@ -189,8 +192,8 @@ function _startDaemon(settings) {
         // Notify renderer the daemon is gone
         _notifyRenderer({ event: "state", status: "error", detail: "Voice daemon stopped." });
 
-        // Auto-restart unless it was a clean shutdown (code 0 or null means killed intentionally)
-        if (code !== 0 && code !== null) {
+        // Auto-restart unless it was a clean exit (code 0), intentional restart, or app is quitting
+        if (!_isQuitting && !_intentionalStop && code !== 0) {
             _daemonRestarts++;
             _scheduleRestart();
         }
@@ -200,8 +203,10 @@ function _startDaemon(settings) {
         console.error("[Daemon] Process error:", err.message);
         _daemon = null;
         _daemonReady = false;
-        _daemonRestarts++;
-        _scheduleRestart();
+        if (!_isQuitting) {
+            _daemonRestarts++;
+            _scheduleRestart();
+        }
     });
 
     // Push current settings to the daemon once it's ready
@@ -239,6 +244,7 @@ function _killTree(child) {
 }
 
 function _shutdownDaemon() {
+    _isQuitting = true;
     if (_daemonRestartTimer) {
         clearTimeout(_daemonRestartTimer);
         _daemonRestartTimer = null;
@@ -391,9 +397,19 @@ ipcMain.handle("voice:start_listening", async () => {
 });
 
 ipcMain.handle("voice:restart_daemon", async () => {
-    _shutdownDaemon();
+    _intentionalStop = true;
+    if (_daemonRestartTimer) {
+        clearTimeout(_daemonRestartTimer);
+        _daemonRestartTimer = null;
+    }
+    if (_daemon) {
+        const proc = _daemon;
+        try { _daemonCommand({ cmd: "shutdown" }); } catch (_) {}
+        setTimeout(() => { if (_daemon === proc) { _killTree(proc); _daemon = null; } }, 1000);
+    }
+    _isQuitting = false;
     _daemonRestarts = 0;   // reset counter on explicit user request
-    setTimeout(() => _startDaemon(loadSettingsSync()), 500);
+    setTimeout(() => _startDaemon(loadSettingsSync()), 1200);
     return { ok: true };
 });
 

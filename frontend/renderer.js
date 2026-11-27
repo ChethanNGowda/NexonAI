@@ -22,6 +22,11 @@ const speechVolumeSlider = document.getElementById("speechVolumeSlider");
 const speechVolumeValue = document.getElementById("speechVolumeValue");
 const clearMemoryBtn = document.getElementById("clearMemoryBtn");
 
+// Voice Controls UI
+const listenToggleBtn = document.getElementById("listenToggleBtn");
+const interruptSpeechBtn = document.getElementById("interruptSpeechBtn");
+const reconnectVoiceBtn = document.getElementById("reconnectVoiceBtn");
+
 // Mode buttons
 const modeChat = document.getElementById("modeChat");
 const modeSearch = document.getElementById("modeSearch");
@@ -44,6 +49,8 @@ let actionTimer = null;
 let currentMode = "chat"; // "chat" | "search" | "research"
 let lastMarkdownReport = "";
 let isWindowMaximized = false;
+let daemonState = "loading"; // "loading" | "listening" | "idle" | "thinking" | "speaking" | "error"
+let voiceControlBusy = false;
 
 // Active User Settings State
 let userSettings = {
@@ -335,27 +342,142 @@ if (api?.onProgress) {
     });
 }
 
+function updateVoiceControlsUI(state) {
+    daemonState = state;
+    if (!listenToggleBtn || !interruptSpeechBtn || !reconnectVoiceBtn) return;
+
+    listenToggleBtn.classList.remove("listening-active");
+
+    if (state === "error") {
+        listenToggleBtn.textContent = "Voice Offline";
+        listenToggleBtn.disabled = true;
+        interruptSpeechBtn.disabled = true;
+        reconnectVoiceBtn.classList.remove("hidden");
+        reconnectVoiceBtn.disabled = false;
+        return;
+    }
+
+    reconnectVoiceBtn.classList.add("hidden");
+
+    if (state === "loading") {
+        listenToggleBtn.textContent = "Loading Voice...";
+        listenToggleBtn.disabled = true;
+        interruptSpeechBtn.disabled = true;
+    } else if (state === "listening") {
+        listenToggleBtn.textContent = "Stop Listening";
+        listenToggleBtn.classList.add("listening-active");
+        listenToggleBtn.disabled = false;
+        interruptSpeechBtn.disabled = true;
+    } else if (state === "idle") {
+        listenToggleBtn.textContent = "Start Listening";
+        listenToggleBtn.disabled = false;
+        interruptSpeechBtn.disabled = true;
+    } else if (state === "thinking") {
+        listenToggleBtn.textContent = "Stop Listening";
+        listenToggleBtn.disabled = false;
+        interruptSpeechBtn.disabled = true;
+    } else if (state === "speaking") {
+        listenToggleBtn.textContent = "Stop Listening";
+        listenToggleBtn.disabled = false;
+        interruptSpeechBtn.disabled = false;
+    }
+}
+
+if (listenToggleBtn) {
+    listenToggleBtn.addEventListener("click", async () => {
+        if (voiceControlBusy || daemonState === "loading" || daemonState === "error") return;
+        voiceControlBusy = true;
+        listenToggleBtn.disabled = true;
+        try {
+            if (daemonState === "idle") {
+                await api?.startListening?.();
+                updateVoiceControlsUI("listening");
+                setStatus("Listening");
+            } else {
+                await api?.stopListening?.();
+                updateVoiceControlsUI("idle");
+                setStatus("Paused");
+            }
+        } catch (e) {
+            console.error("Listen toggle failed:", e);
+            updateVoiceControlsUI("error");
+        } finally {
+            voiceControlBusy = false;
+        }
+    });
+}
+
+if (interruptSpeechBtn) {
+    interruptSpeechBtn.addEventListener("click", async () => {
+        if (voiceControlBusy || daemonState !== "speaking") return;
+        voiceControlBusy = true;
+        interruptSpeechBtn.disabled = true;
+        try {
+            await api?.interruptAudio?.();
+            setMood("sitting");
+            updateVoiceControlsUI("listening");
+            setStatus("Listening");
+        } catch (e) {
+            console.error("Interrupt speech failed:", e);
+        } finally {
+            voiceControlBusy = false;
+        }
+    });
+}
+
+if (reconnectVoiceBtn) {
+    reconnectVoiceBtn.addEventListener("click", async () => {
+        if (voiceControlBusy) return;
+        voiceControlBusy = true;
+        reconnectVoiceBtn.disabled = true;
+        reconnectVoiceBtn.textContent = "Reconnecting...";
+        try {
+            await api?.restartDaemon?.();
+            updateVoiceControlsUI("loading");
+            setStatus("Reconnecting...");
+        } catch (e) {
+            console.error("Reconnect failed:", e);
+            updateVoiceControlsUI("error");
+        } finally {
+            reconnectVoiceBtn.textContent = "Reconnect";
+            voiceControlBusy = false;
+        }
+    });
+}
+
 if (api?.onVoiceEvent) {
     api.onVoiceEvent((evt) => {
         console.log("[Voice Event]:", evt);
 
         if (evt.event === "ready") {
+            updateVoiceControlsUI("listening");
             setBubble(evt.message || "Phoebe is listening...");
-            setStatus("Ready");
+            setStatus("Listening");
         } else if (evt.event === "heard") {
             setBubble(`Heard: "${evt.text}"`);
             setStatus("Heard");
             setMood("talking");
+        } else if (evt.event === "error") {
+            setStatus("Voice Error");
+            if (evt.message) setBubble(evt.message);
         } else if (evt.event === "state") {
-            if (evt.status === "thinking") {
+            const st = evt.status || "listening";
+            updateVoiceControlsUI(st);
+            if (st === "thinking") {
                 setStatus("Thinking");
                 setMood("sitting");
                 setBubble("Thinking...");
-            } else if (evt.status === "listening") {
+            } else if (st === "listening") {
                 setStatus("Listening");
-            } else if (evt.status === "speaking") {
+            } else if (st === "idle") {
+                setStatus("Paused");
+                setMood("sitting");
+            } else if (st === "speaking") {
                 setStatus("Speaking");
                 setMood("talking");
+            } else if (st === "error") {
+                setStatus("Voice Offline");
+                setMood("sitting");
             }
         } else if (evt.event === "response") {
             setBubble(evt.answer);
