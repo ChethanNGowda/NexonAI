@@ -154,7 +154,7 @@ class _StdinCommandReader(threading.Thread):
                 with self._lock:
                     self._commands.append(cmd)
                 if req_id is not None and action in {
-                    "stop_listening", "start_listening", "set_voice", "set_model", "set_rate", "set_volume"
+                    "stop_listening", "start_listening", "set_voice", "set_voice_id", "set_model", "set_rate", "set_volume"
                 }:
                     _emit({"event": "ack", "request_id": req_id, "cmd": action})
                 if action == "shutdown":
@@ -302,9 +302,9 @@ def run_voice_loop_ipc(always_listen: bool = False, silent_greeting: bool = Fals
         from backend.core.assistant import check_wake_word, handle_fast_intent
         from backend.ai.assistant import get_assistant
         from backend.voice.stt import SpeechRecognizer
-        from backend.voice.tts import speak, stop_audio, set_speech_rate, set_speech_volume
+        from backend.voice.tts import speak, stop_audio, set_speech_rate, set_speech_volume, set_voice_id
     except Exception as e:
-        _emit({"event": "error", "message": f"Import failure: {e}"})
+        _emit({"event": "error", "code": "import_error", "message": "Voice subsystem failed to initialize."})
         _log(f"Import failure: {e}")
         return
 
@@ -312,6 +312,8 @@ def run_voice_loop_ipc(always_listen: bool = False, silent_greeting: bool = Fals
     voice_enabled = True
     listening_enabled = True
     current_model: str | None = None
+    mic_failures = 0
+    in_mic_error = False
 
     # Start stdin command reader
     cmd_reader = _StdinCommandReader()
@@ -356,6 +358,11 @@ def run_voice_loop_ipc(always_listen: bool = False, silent_greeting: bool = Fals
             elif action == "set_voice":
                 voice_enabled = bool(cmd.get("enabled", True))
                 _log(f"Voice output {'enabled' if voice_enabled else 'disabled'}.")
+            elif action == "set_voice_id":
+                vid = str(cmd.get("voice") or "").strip()
+                if vid:
+                    set_voice_id(vid)
+                    _log(f"Voice ID set to: {vid}")
             elif action == "set_model":
                 current_model = cmd.get("model") or None
                 _log(f"Model set to: {current_model}")
@@ -381,13 +388,50 @@ def run_voice_loop_ipc(always_listen: bool = False, silent_greeting: bool = Fals
 
         # --- Listen for speech ---
         try:
-            transcript = recognizer.listen_and_transcribe()
+            listen_res = recognizer.listen_and_transcribe_result()
         except Exception as e:
-            _emit({"event": "error", "message": f"Microphone error: {e}"})
+            mic_failures += 1
+            in_mic_error = True
+            _emit({
+                "event": "error",
+                "code": "stream_error",
+                "message": "Microphone encountered an unexpected error.",
+            })
+            _emit({
+                "event": "state",
+                "status": "mic_error",
+                "code": "stream_error",
+                "detail": "Microphone encountered an unexpected error.",
+            })
             _log(f"Microphone error: {e}")
-            time.sleep(1)
+            time.sleep(min(10.0, 1.5 * (2 ** min(mic_failures - 1, 3))))
             continue
 
+        if not listen_res.ok:
+            mic_failures += 1
+            in_mic_error = True
+            _emit({
+                "event": "error",
+                "code": listen_res.error_code or "mic_error",
+                "message": listen_res.error_message or "Microphone error.",
+            })
+            _emit({
+                "event": "state",
+                "status": "mic_error",
+                "code": listen_res.error_code or "mic_error",
+                "detail": listen_res.error_message or "Microphone error.",
+            })
+            time.sleep(min(10.0, 1.5 * (2 ** min(mic_failures - 1, 3))))
+            continue
+
+        if in_mic_error:
+            in_mic_error = False
+            mic_failures = 0
+            _emit({"event": "state", "status": "listening", "detail": "Microphone recovered."})
+        else:
+            mic_failures = 0
+
+        transcript = listen_res.text
         if not transcript or not transcript.strip():
             continue
 
